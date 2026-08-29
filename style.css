@@ -858,10 +858,35 @@ input:checked + .toggle-slider:before {
   border-color: var(--accent-indigo);
 }
 .btn-preset.active {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.2));
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(56, 189, 248, 0.15));
   border-color: var(--accent-cyan);
   color: var(--accent-cyan);
   font-weight: 600;
+}
+
+.btn-preset.highlight-kevan {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.12));
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  font-weight: 600;
+}
+.btn-preset.highlight-kevan:hover,
+.btn-preset.highlight-kevan.active {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.3), rgba(239, 68, 68, 0.25));
+  border-color: #fbbf24;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+}
+
+.pill-btn.highlight-sample {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(99, 102, 241, 0.12));
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fde68a;
+  font-weight: 600;
+}
+.pill-btn.highlight-sample:hover {
+  border-color: #fbbf24;
+  color: #fff;
 }
 
 /* Generation & Status Bar */

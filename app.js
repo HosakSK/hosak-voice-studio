@@ -127,15 +127,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Presets Definition
   const PRESETS = {
-    natural: { speed: 1.00, pitch: 0, noiseScale: 0.667, noiseW: 0.800, volume: 1.00, gap: 0.22, eqBass: 0, eqMid: 0, eqTreble: 0, reverb: 'none', echo: false, specialFx: 'none' },
-    fast: { speed: 1.25, pitch: 0, noiseScale: 0.667, noiseW: 0.750, volume: 1.10, gap: 0.15, eqBass: 1, eqMid: 2, eqTreble: 1, reverb: 'none', echo: false, specialFx: 'none' },
-    trailer: { speed: 0.85, pitch: -3, noiseScale: 0.850, noiseW: 0.900, volume: 1.25, gap: 0.35, eqBass: 5, eqMid: 2, eqTreble: 3, reverb: 'hall', echo: false, specialFx: 'none' },
-    podcast: { speed: 1.05, pitch: 0, noiseScale: 0.620, noiseW: 0.800, volume: 1.05, gap: 0.20, eqBass: 3, eqMid: 1, eqTreble: 2, reverb: 'booth', echo: false, specialFx: 'none' },
-    calm: { speed: 0.90, pitch: 0, noiseScale: 0.550, noiseW: 0.850, volume: 0.95, gap: 0.30, eqBass: 0, eqMid: -1, eqTreble: 1, reverb: 'studio', echo: false, specialFx: 'none' }
+    kevan: {
+      voiceId: 'en_GB-alan-medium',
+      lang: 'en',
+      speed: 0.85,       // length_scale 1.18 (deliberate, dry, deadpan tempo)
+      pitch: -1,         // mature, theatrical British baritone resonance
+      noiseScale: 0.550, // reduced variability for dry, cynical, deadpan delivery
+      noiseW: 0.800,     // high clarity, crisp theatrical articulation
+      gap: 0.38,         // measured theatrical dramatic pauses
+      volume: 1.05,
+      eqBass: 3,         // +3dB warmth at 120Hz
+      eqMid: 2,          // +2dB presence at 2.5kHz
+      eqTreble: 1,       // +1dB air at 8kHz
+      reverb: 'booth',   // treated dry vocal booth
+      reverbMix: 0.16,
+      echo: false,
+      specialFx: 'none',
+      compressor: true
+    },
+    natural: { speed: 1.00, pitch: 0, noiseScale: 0.667, noiseW: 0.800, volume: 1.00, gap: 0.22, eqBass: 0, eqMid: 0, eqTreble: 0, reverb: 'none', echo: false, specialFx: 'none', compressor: true },
+    fast: { speed: 1.25, pitch: 0, noiseScale: 0.667, noiseW: 0.750, volume: 1.10, gap: 0.15, eqBass: 1, eqMid: 2, eqTreble: 1, reverb: 'none', echo: false, specialFx: 'none', compressor: true },
+    trailer: { speed: 0.85, pitch: -3, noiseScale: 0.850, noiseW: 0.900, volume: 1.25, gap: 0.35, eqBass: 5, eqMid: 2, eqTreble: 3, reverb: 'hall', reverbMix: 0.30, echo: false, specialFx: 'none', compressor: true },
+    podcast: { speed: 1.05, pitch: 0, noiseScale: 0.620, noiseW: 0.800, volume: 1.05, gap: 0.20, eqBass: 3, eqMid: 1, eqTreble: 2, reverb: 'booth', reverbMix: 0.18, echo: false, specialFx: 'none', compressor: true },
+    calm: { speed: 0.90, pitch: 0, noiseScale: 0.550, noiseW: 0.850, volume: 0.95, gap: 0.30, eqBass: 0, eqMid: -1, eqTreble: 1, reverb: 'studio', reverbMix: 0.20, echo: false, specialFx: 'none', compressor: true }
   };
 
   // Sample Texts
   const SAMPLES = {
+    kevan: 'When Stanley came to a set of two open doors, he entered the door on his left. ... [pause 450ms] This was not, in fact, the correct path, but Stanley was nothing if not persistent. ... [pause 600ms] Ah, yes. The sweet, delirious heat of a fever dream.',
     en_us: 'Welcome to the Piper Voice-Over Studio! High quality neural text-to-speech running completely offline and locally in your browser.',
     en_gb: 'Good day! Piper TTS delivers remarkably clear, expressive and natural British English voice-overs with zero cloud latency.',
     sk: 'Vitajte v modernom štúdiu hlasových nahrávok! Piper TTS vytvára prirodzenú reč s vysokou vernosťou priamo vo vašom prehliadači.',
@@ -407,6 +426,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const preset = PRESETS[presetKey];
     if (!preset) return;
 
+    if (preset.voiceId) {
+      langFilterSelect.value = preset.lang || 'en';
+      populateVoiceDropdown(preset.lang || 'en', activeTagFilter, preset.voiceId);
+    }
+
     speedRange.value = preset.speed ?? 1.0;
     pitchRange.value = preset.pitch ?? 0;
     noiseScaleRange.value = preset.noiseScale ?? 0.667;
@@ -419,8 +443,10 @@ document.addEventListener('DOMContentLoaded', () => {
     eqTrebleRange.value = preset.eqTreble ?? 0;
 
     reverbPresetSelect.value = preset.reverb ?? 'none';
+    reverbMixRange.value = preset.reverbMix ?? 0.20;
     echoEnabledCheckbox.checked = !!preset.echo;
     specialFxSelect.value = preset.specialFx ?? 'none';
+    compressorCheckbox.checked = preset.compressor !== undefined ? preset.compressor : true;
 
     updateSliderDisplay();
 
@@ -479,7 +505,9 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptInput.value = SAMPLES[sampleKey];
         updateTextStats();
         
-        if (sampleKey === 'en_us') {
+        if (sampleKey === 'kevan') {
+          applyPreset('kevan');
+        } else if (sampleKey === 'en_us') {
           langFilterSelect.value = 'en';
           populateVoiceDropdown('en', activeTagFilter, 'en_US-ryan-high');
         } else if (sampleKey === 'en_gb') {
