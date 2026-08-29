@@ -335,7 +335,20 @@ class PiperEngine {
     noiseScale = 0.667,
     noiseW = 0.800,
     speakerId = 0,
+    sentenceGap = 0.22,
     volume = 1.0,
+    pitchShift = 0,
+    eqBass = 0,
+    eqMid = 0,
+    eqTreble = 0,
+    reverb = 'none',
+    reverbMix = 0.20,
+    echoEnabled = false,
+    echoTimeMs = 250,
+    echoFeedback = 0.35,
+    echoMix = 0.25,
+    specialFx = 'none',
+    compressor = true,
     mp3Bitrate = 192,
     onProgress = null
   }) {
@@ -425,13 +438,26 @@ class PiperEngine {
       throw new Error('Synthesis did not return any audio data. Please ensure the voice model loaded completely.');
     }
 
-    if (onProgress) onProgress({ stage: 'processing', message: 'Processing audio and encoding formats...', percent: 88 });
+    if (onProgress) onProgress({ stage: 'processing', message: 'Applying studio DSP audio effects...', percent: 88 });
 
-    const rawCombinedPcm = this.audioProcessor.concatenatePcmChunks(pcmChunks, sampleRate, 0.22);
+    const rawCombinedPcm = this.audioProcessor.concatenatePcmChunks(pcmChunks, sampleRate, sentenceGap);
 
     const processedPcm = this.audioProcessor.processAudioEffects(rawCombinedPcm, {
       gain: volume,
-      normalize: true
+      normalize: true,
+      sampleRate,
+      pitchShift,
+      eqBass,
+      eqMid,
+      eqTreble,
+      reverb,
+      reverbMix,
+      echoEnabled,
+      echoTimeMs,
+      echoFeedback,
+      echoMix,
+      specialFx,
+      compressor
     });
 
     const durationSeconds = processedPcm.length / sampleRate;

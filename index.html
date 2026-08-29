@@ -167,6 +167,16 @@
             </div>
           </div>
 
+          <!-- Voice Filter Tags -->
+          <div class="voice-tags-bar">
+            <span class="filter-tag-pill active" data-tag="all">All</span>
+            <span class="filter-tag-pill" data-tag="high">High HD</span>
+            <span class="filter-tag-pill" data-tag="medium">Medium</span>
+            <span class="filter-tag-pill" data-tag="female">Female</span>
+            <span class="filter-tag-pill" data-tag="male">Male</span>
+            <span class="filter-tag-pill" data-tag="multi">Multi-Persona</span>
+          </div>
+
           <!-- Active Selected Voice Card -->
           <div class="active-voice-card">
             <div class="voice-info">
@@ -181,6 +191,10 @@
                   <span id="voiceSizeMeta">~35 MB</span> &bull; 
                   <span class="cache-pill cached" id="voiceCacheStatus">Cached in storage</span>
                 </div>
+                <div class="voice-tags-list" id="voiceTagsList">
+                  <span class="voice-mini-tag">Male</span>
+                  <span class="voice-mini-tag">Studio HD</span>
+                </div>
               </div>
             </div>
             <button class="btn-test-voice" id="btnTestVoice" title="Play a short sample of the selected voice">
@@ -191,97 +205,250 @@
 
           <!-- Multi-speaker selector -->
           <div class="speaker-row" id="speakerRow" style="display: none;">
-            <label for="speakerSelect">Speaker (Persona):</label>
-            <select id="speakerSelect" class="custom-select">
-              <option value="0">Default Speaker (0)</option>
-            </select>
+            <div class="filter-field" style="width: 100%;">
+              <label for="speakerSelect" class="filter-label">Speaker (Persona / Sub-Voice):</label>
+              <select id="speakerSelect" class="custom-select">
+                <option value="0">Default Speaker (0)</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        <!-- Tuning Sliders -->
+        <!-- Tuning Sliders & Studio DSP Effects -->
         <div class="panel-header" style="margin-top: 6px;">
           <div class="panel-title">
             <span class="icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></svg>
             </span>
-            <span>Voice & Audio Settings</span>
+            <span>Voice & Studio Audio Settings</span>
           </div>
-          <button class="pill-btn" id="btnResetSliders" title="Reset all sliders to defaults">
+          <button class="pill-btn" id="btnResetSliders" title="Reset all sliders and effects to defaults">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             Reset
           </button>
         </div>
 
-        <div class="sliders-grid">
-          
-          <!-- Speed / Speaking Rate -->
-          <div class="slider-group">
-            <div class="slider-header">
-              <span class="slider-label">
-                Speaking Speed (Tempo)
-                <small>(length_scale)</small>
-              </span>
-              <span class="slider-value-badge" id="speedVal">1.00x</span>
-            </div>
-            <input type="range" id="speedRange" class="range-input" min="0.5" max="2.0" step="0.05" value="1.0">
-            <div class="slider-scale">
-              <span>0.5x (Slow)</span>
-              <span>1.0x (Normal)</span>
-              <span>2.0x (Fast)</span>
-            </div>
-          </div>
+        <!-- Tab selection for Core Voice vs DSP Effects -->
+        <div class="settings-tabs">
+          <button class="settings-tab-btn active" data-tab="voice">Core Parameters</button>
+          <button class="settings-tab-btn" data-tab="fx">Studio FX & DSP (Reverb, EQ, Pitch)</button>
+        </div>
 
-          <!-- Tone Variability / Intonation -->
-          <div class="slider-group">
-            <div class="slider-header">
-              <span class="slider-label">
-                Tone Variability / Expression
-                <small>(noise_scale)</small>
-              </span>
-              <span class="slider-value-badge" id="noiseScaleVal">0.667</span>
+        <!-- Tab 1: Core Voice Parameters -->
+        <div class="tab-content active" id="tabVoice">
+          <div class="sliders-grid">
+            
+            <!-- Speed / Speaking Rate -->
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-label">
+                  Speaking Speed (Tempo)
+                  <small>(length_scale)</small>
+                </span>
+                <span class="slider-value-badge" id="speedVal">1.00x</span>
+              </div>
+              <input type="range" id="speedRange" class="range-input" min="0.5" max="2.0" step="0.05" value="1.0">
+              <div class="slider-scale">
+                <span>0.5x (Slow)</span>
+                <span>1.0x (Normal)</span>
+                <span>2.0x (Fast)</span>
+              </div>
             </div>
-            <input type="range" id="noiseScaleRange" class="range-input" min="0.1" max="1.5" step="0.02" value="0.667">
-            <div class="slider-scale">
-              <span>0.1 (Monotone)</span>
-              <span>0.67 (Natural)</span>
-              <span>1.5 (Dynamic)</span>
-            </div>
-          </div>
 
-          <!-- Phoneme Duration Variability -->
-          <div class="slider-group">
-            <div class="slider-header">
-              <span class="slider-label">
-                Phoneme Cadence & Rhythm
-                <small>(noise_w)</small>
-              </span>
-              <span class="slider-value-badge" id="noiseWVal">0.800</span>
+            <!-- Pitch Shift -->
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-label">
+                  Pitch Transposition
+                  <small>(semitones)</small>
+                </span>
+                <span class="slider-value-badge" id="pitchVal">0 st</span>
+              </div>
+              <input type="range" id="pitchRange" class="range-input" min="-12" max="12" step="1" value="0">
+              <div class="slider-scale">
+                <span>-12st (Deep)</span>
+                <span>0 (Natural)</span>
+                <span>+12st (High)</span>
+              </div>
             </div>
-            <input type="range" id="noiseWRange" class="range-input" min="0.1" max="1.5" step="0.02" value="0.800">
-            <div class="slider-scale">
-              <span>0.1 (Steady)</span>
-              <span>0.8 (Smooth)</span>
-              <span>1.5 (Expressive)</span>
-            </div>
-          </div>
 
-          <!-- Master Volume / Gain -->
-          <div class="slider-group">
-            <div class="slider-header">
-              <span class="slider-label">
-                Volume & Master Gain
-                <small>(master gain)</small>
-              </span>
-              <span class="slider-value-badge" id="volumeVal">100%</span>
+            <!-- Tone Variability / Intonation -->
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-label">
+                  Tone Variability / Expression
+                  <small>(noise_scale)</small>
+                </span>
+                <span class="slider-value-badge" id="noiseScaleVal">0.667</span>
+              </div>
+              <input type="range" id="noiseScaleRange" class="range-input" min="0.1" max="1.5" step="0.02" value="0.667">
+              <div class="slider-scale">
+                <span>0.1 (Monotone)</span>
+                <span>0.67 (Natural)</span>
+                <span>1.5 (Dynamic)</span>
+              </div>
             </div>
-            <input type="range" id="volumeRange" class="range-input" min="0.2" max="2.0" step="0.05" value="1.0">
-            <div class="slider-scale">
-              <span>20%</span>
-              <span>100% (Standard)</span>
-              <span>200% (+6dB)</span>
-            </div>
-          </div>
 
+            <!-- Phoneme Duration Variability -->
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-label">
+                  Phoneme Cadence & Rhythm
+                  <small>(noise_w)</small>
+                </span>
+                <span class="slider-value-badge" id="noiseWVal">0.800</span>
+              </div>
+              <input type="range" id="noiseWRange" class="range-input" min="0.1" max="1.5" step="0.02" value="0.800">
+              <div class="slider-scale">
+                <span>0.1 (Steady)</span>
+                <span>0.8 (Smooth)</span>
+                <span>1.5 (Expressive)</span>
+              </div>
+            </div>
+
+            <!-- Sentence Gap -->
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-label">
+                  Sentence Pause Gap
+                  <small>(inter-sentence silence)</small>
+                </span>
+                <span class="slider-value-badge" id="gapVal">0.22s</span>
+              </div>
+              <input type="range" id="gapRange" class="range-input" min="0.05" max="1.20" step="0.05" value="0.22">
+              <div class="slider-scale">
+                <span>0.05s (Tight)</span>
+                <span>0.22s (Natural)</span>
+                <span>1.20s (Dramatic)</span>
+              </div>
+            </div>
+
+            <!-- Master Volume / Gain -->
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-label">
+                  Master Volume / Output Gain
+                  <small>(gain)</small>
+                </span>
+                <span class="slider-value-badge" id="volumeVal">100%</span>
+              </div>
+              <input type="range" id="volumeRange" class="range-input" min="0.2" max="2.0" step="0.05" value="1.0">
+              <div class="slider-scale">
+                <span>20%</span>
+                <span>100% (Standard)</span>
+                <span>200% (+6dB)</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Tab 2: Studio DSP Effects Rack -->
+        <div class="tab-content" id="tabFx" style="display: none;">
+          <div class="fx-grid">
+
+            <!-- 3-Band Equalizer -->
+            <div class="fx-card">
+              <div class="fx-card-title">
+                <span>🎚️ 3-Band Studio Equalizer</span>
+              </div>
+              <div class="eq-controls-row">
+                <div class="eq-col">
+                  <span class="eq-label">Bass (120Hz)</span>
+                  <input type="range" id="eqBassRange" class="range-input" min="-12" max="12" step="1" value="0">
+                  <span class="eq-val" id="eqBassVal">0 dB</span>
+                </div>
+                <div class="eq-col">
+                  <span class="eq-label">Presence (2.5kHz)</span>
+                  <input type="range" id="eqMidRange" class="range-input" min="-12" max="12" step="1" value="0">
+                  <span class="eq-val" id="eqMidVal">0 dB</span>
+                </div>
+                <div class="eq-col">
+                  <span class="eq-label">Air (8kHz)</span>
+                  <input type="range" id="eqTrebleRange" class="range-input" min="-12" max="12" step="1" value="0">
+                  <span class="eq-val" id="eqTrebleVal">0 dB</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Reverb & Acoustics -->
+            <div class="fx-card">
+              <div class="fx-card-title">
+                <span>🏛️ Acoustic Reverb & Space</span>
+              </div>
+              <div class="fx-fields-row">
+                <div class="filter-field">
+                  <label for="reverbPresetSelect" class="filter-label">Space Preset:</label>
+                  <select id="reverbPresetSelect" class="custom-select">
+                    <option value="none">Dry (No Reverb)</option>
+                    <option value="booth">Vocal Booth (Acoustic Foam)</option>
+                    <option value="studio">Warm Studio Room</option>
+                    <option value="hall">Spacious Concert Hall</option>
+                    <option value="cathedral">Cathedral (Huge Space)</option>
+                  </select>
+                </div>
+                <div class="slider-group" style="flex: 1;">
+                  <div class="slider-header">
+                    <span class="slider-label">Reverb Wet Mix</span>
+                    <span class="slider-value-badge" id="reverbMixVal">20%</span>
+                  </div>
+                  <input type="range" id="reverbMixRange" class="range-input" min="0" max="0.6" step="0.05" value="0.2">
+                </div>
+              </div>
+            </div>
+
+            <!-- Echo & Delay -->
+            <div class="fx-card">
+              <div class="fx-card-title">
+                <span>🔁 Studio Echo & Delay</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="echoEnabledCheckbox">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="fx-fields-row" id="echoControlsBox" style="opacity: 0.5; pointer-events: none;">
+                <div class="slider-group" style="flex: 1;">
+                  <div class="slider-header">
+                    <span class="slider-label">Delay Time</span>
+                    <span class="slider-value-badge" id="echoTimeVal">250ms</span>
+                  </div>
+                  <input type="range" id="echoTimeRange" class="range-input" min="50" max="600" step="25" value="250">
+                </div>
+                <div class="slider-group" style="flex: 1;">
+                  <div class="slider-header">
+                    <span class="slider-label">Feedback</span>
+                    <span class="slider-value-badge" id="echoFeedbackVal">35%</span>
+                  </div>
+                  <input type="range" id="echoFeedbackRange" class="range-input" min="0" max="0.75" step="0.05" value="0.35">
+                </div>
+              </div>
+            </div>
+
+            <!-- Special FX Filters & Broadcast Compressor -->
+            <div class="fx-card">
+              <div class="fx-card-title">
+                <span>📻 Special FX Filters & Dynamics</span>
+              </div>
+              <div class="fx-fields-row">
+                <div class="filter-field" style="flex: 1;">
+                  <label for="specialFxSelect" class="filter-label">Voice Filter Effect:</label>
+                  <select id="specialFxSelect" class="custom-select">
+                    <option value="none">None (Clean Vocal)</option>
+                    <option value="radio">Old Radio / Walkie-Talkie</option>
+                    <option value="robot">Cybernetic Robot (Tremolo)</option>
+                    <option value="phone">Telephone Call (Lo-Fi)</option>
+                  </select>
+                </div>
+                <div class="filter-field" style="flex: 1; justify-content: center;">
+                  <label class="checkbox-row" style="margin-top: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="compressorCheckbox" checked style="accent-color: var(--accent-cyan);">
+                    <span style="font-size: 0.85rem; color: var(--text-main); font-weight: 500;">Broadcast Dynamics Compressor</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
 
         <!-- Presets -->

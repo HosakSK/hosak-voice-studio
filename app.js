@@ -1,5 +1,8 @@
 /**
- * Piper Voice-Over Studio - Application Controller (Clean English & SVGs)
+ * Piper Voice-Over Studio - Application Controller
+ * Handles complete Piper TTS Voice Catalog (175 Models, 2,711 Personas),
+ * Studio DSP Effects (Pitch Shift, 3-Band EQ, Reverb, Echo, Radio/Robot FX, Compressor),
+ * Live Waveform Visualizer, and Lossless Export.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -26,21 +29,54 @@ document.addEventListener('DOMContentLoaded', () => {
   const voiceLangMeta = document.getElementById('voiceLangMeta');
   const voiceSizeMeta = document.getElementById('voiceSizeMeta');
   const voiceCacheStatus = document.getElementById('voiceCacheStatus');
+  const voiceTagsList = document.getElementById('voiceTagsList');
   const btnTestVoice = document.getElementById('btnTestVoice');
   const speakerRow = document.getElementById('speakerRow');
   const speakerSelect = document.getElementById('speakerSelect');
+  const filterTagPills = document.querySelectorAll('.filter-tag-pill[data-tag]');
 
-  // Sliders Elements
+  // Tab Elements
+  const settingsTabButtons = document.querySelectorAll('.settings-tab-btn');
+  const tabVoice = document.getElementById('tabVoice');
+  const tabFx = document.getElementById('tabFx');
+
+  // Core Sliders Elements
   const speedRange = document.getElementById('speedRange');
   const speedVal = document.getElementById('speedVal');
+  const pitchRange = document.getElementById('pitchRange');
+  const pitchVal = document.getElementById('pitchVal');
   const noiseScaleRange = document.getElementById('noiseScaleRange');
   const noiseScaleVal = document.getElementById('noiseScaleVal');
   const noiseWRange = document.getElementById('noiseWRange');
   const noiseWVal = document.getElementById('noiseWVal');
+  const gapRange = document.getElementById('gapRange');
+  const gapVal = document.getElementById('gapVal');
   const volumeRange = document.getElementById('volumeRange');
   const volumeVal = document.getElementById('volumeVal');
   const btnResetSliders = document.getElementById('btnResetSliders');
   const presetButtons = document.querySelectorAll('.btn-preset');
+
+  // Studio DSP FX Elements
+  const eqBassRange = document.getElementById('eqBassRange');
+  const eqBassVal = document.getElementById('eqBassVal');
+  const eqMidRange = document.getElementById('eqMidRange');
+  const eqMidVal = document.getElementById('eqMidVal');
+  const eqTrebleRange = document.getElementById('eqTrebleRange');
+  const eqTrebleVal = document.getElementById('eqTrebleVal');
+
+  const reverbPresetSelect = document.getElementById('reverbPresetSelect');
+  const reverbMixRange = document.getElementById('reverbMixRange');
+  const reverbMixVal = document.getElementById('reverbMixVal');
+
+  const echoEnabledCheckbox = document.getElementById('echoEnabledCheckbox');
+  const echoControlsBox = document.getElementById('echoControlsBox');
+  const echoTimeRange = document.getElementById('echoTimeRange');
+  const echoTimeVal = document.getElementById('echoTimeVal');
+  const echoFeedbackRange = document.getElementById('echoFeedbackRange');
+  const echoFeedbackVal = document.getElementById('echoFeedbackVal');
+
+  const specialFxSelect = document.getElementById('specialFxSelect');
+  const compressorCheckbox = document.getElementById('compressorCheckbox');
 
   // Generation Elements
   const btnGenerate = document.getElementById('btnGenerate');
@@ -78,6 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 3. Application State
   let currentVoiceId = 'en_US-ryan-high';
+  let activeTagFilter = 'all';
   let currentAudio = new Audio();
   let currentPcmData = null;
   let currentSampleRate = 22050;
@@ -90,11 +127,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Presets Definition
   const PRESETS = {
-    natural: { speed: 1.00, noiseScale: 0.667, noiseW: 0.800, volume: 1.00 },
-    fast: { speed: 1.25, noiseScale: 0.667, noiseW: 0.750, volume: 1.10 },
-    trailer: { speed: 0.85, noiseScale: 0.850, noiseW: 0.900, volume: 1.25 },
-    podcast: { speed: 1.05, noiseScale: 0.620, noiseW: 0.800, volume: 1.00 },
-    calm: { speed: 0.90, noiseScale: 0.550, noiseW: 0.850, volume: 0.95 }
+    natural: { speed: 1.00, pitch: 0, noiseScale: 0.667, noiseW: 0.800, volume: 1.00, gap: 0.22, eqBass: 0, eqMid: 0, eqTreble: 0, reverb: 'none', echo: false, specialFx: 'none' },
+    fast: { speed: 1.25, pitch: 0, noiseScale: 0.667, noiseW: 0.750, volume: 1.10, gap: 0.15, eqBass: 1, eqMid: 2, eqTreble: 1, reverb: 'none', echo: false, specialFx: 'none' },
+    trailer: { speed: 0.85, pitch: -3, noiseScale: 0.850, noiseW: 0.900, volume: 1.25, gap: 0.35, eqBass: 5, eqMid: 2, eqTreble: 3, reverb: 'hall', echo: false, specialFx: 'none' },
+    podcast: { speed: 1.05, pitch: 0, noiseScale: 0.620, noiseW: 0.800, volume: 1.05, gap: 0.20, eqBass: 3, eqMid: 1, eqTreble: 2, reverb: 'booth', echo: false, specialFx: 'none' },
+    calm: { speed: 0.90, pitch: 0, noiseScale: 0.550, noiseW: 0.850, volume: 0.95, gap: 0.30, eqBass: 0, eqMid: -1, eqTreble: 1, reverb: 'studio', echo: false, specialFx: 'none' }
   };
 
   // Sample Texts
@@ -113,36 +150,65 @@ document.addEventListener('DOMContentLoaded', () => {
     download: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>'
   };
 
+  function capitalize(str) {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, ' ');
+  }
+
   function getCountryCode(voice) {
     if (!voice || !voice.langCode) return 'US';
     const parts = voice.langCode.split('_');
     return (parts[1] || parts[0] || 'US').toUpperCase();
   }
 
-  // 4. Initialize Voice Selection Dropdowns
+  // 4. Tab Switching
+  settingsTabButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      settingsTabButtons.forEach(b => b.classList.toggle('active', b === btn));
+      if (tab === 'voice') {
+        tabVoice.style.display = 'block';
+        tabFx.style.display = 'none';
+      } else {
+        tabVoice.style.display = 'none';
+        tabFx.style.display = 'block';
+      }
+    });
+  });
+
+  // 5. Initialize Voice Selection Dropdowns & Tags
   function initVoices() {
     const voices = window.PIPER_VOICES || {};
     const voiceCount = Object.keys(voices).length;
-    if (voiceCountBadge) voiceCountBadge.textContent = `${voiceCount} voices`;
+    if (voiceCountBadge) voiceCountBadge.textContent = `${voiceCount} models • 2,711 personas`;
 
     if (!voices[currentVoiceId]) {
       currentVoiceId = Object.keys(voices)[0] || 'en_US-ryan-high';
     }
 
-    populateVoiceDropdown(langFilterSelect.value || 'en', currentVoiceId);
+    populateVoiceDropdown(langFilterSelect.value || 'en', activeTagFilter, currentVoiceId);
     renderHistory();
     updateTextStats();
   }
 
-  function populateVoiceDropdown(selectedLang = 'en', targetVoiceId = null) {
+  function populateVoiceDropdown(selectedLang = 'en', tagFilter = 'all', targetVoiceId = null) {
     const voices = window.PIPER_VOICES || {};
     const voiceList = Object.values(voices);
     
-    // Filter voices according to language
+    // Filter voices according to language & tag
     const filtered = voiceList.filter((v) => {
-      if (selectedLang === 'all') return true;
-      const prefix = v.langCode.split('_')[0].toLowerCase();
-      return prefix === selectedLang.toLowerCase();
+      if (selectedLang !== 'all') {
+        const prefix = v.langCode.split('_')[0].toLowerCase();
+        if (prefix !== selectedLang.toLowerCase()) return false;
+      }
+
+      if (tagFilter === 'high' && v.quality !== 'high') return false;
+      if (tagFilter === 'medium' && v.quality !== 'medium') return false;
+      if (tagFilter === 'female' && v.gender !== 'Female') return false;
+      if (tagFilter === 'male' && v.gender !== 'Male') return false;
+      if (tagFilter === 'multi' && (v.numSpeakers || 1) <= 1) return false;
+
+      return true;
     });
 
     voiceSelect.innerHTML = '';
@@ -150,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (filtered.length === 0) {
       const opt = document.createElement('option');
       opt.value = '';
-      opt.textContent = 'No voices found';
+      opt.textContent = 'No voices found matching filters';
       voiceSelect.appendChild(opt);
       return;
     }
@@ -171,7 +237,9 @@ document.addEventListener('DOMContentLoaded', () => {
           const opt = document.createElement('option');
           opt.value = v.id;
           const qualityTag = v.quality === 'high' ? 'HD' : v.quality === 'medium' ? 'MED' : 'FAST';
-          opt.textContent = `${capitalize(v.name)} [${qualityTag}]`;
+          const genderTag = v.gender ? ` • ${v.gender}` : '';
+          const spkTag = v.numSpeakers > 1 ? ` • ${v.numSpeakers} Personas` : '';
+          opt.textContent = `${capitalize(v.name)} [${qualityTag}${genderTag}${spkTag}]`;
           optgroup.appendChild(opt);
         });
         voiceSelect.appendChild(optgroup);
@@ -181,13 +249,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const opt = document.createElement('option');
         opt.value = v.id;
         const qualityTag = v.quality === 'high' ? 'High HD (22kHz)' : v.quality === 'medium' ? 'Medium (22kHz)' : 'Fast (16kHz)';
-        opt.textContent = `${capitalize(v.name)} — ${qualityTag}`;
+        const genderTag = v.gender && v.gender !== 'Neutral' ? ` • ${v.gender}` : '';
+        const spkTag = v.numSpeakers > 1 ? ` • ${v.numSpeakers} Personas` : '';
+        opt.textContent = `${capitalize(v.name)} — ${qualityTag}${genderTag}${spkTag}`;
         voiceSelect.appendChild(opt);
       });
     }
 
     // Set active selected value
-    if (targetVoiceId && voices[targetVoiceId]) {
+    if (targetVoiceId && voices[targetVoiceId] && filtered.some(v => v.id === targetVoiceId)) {
       voiceSelect.value = targetVoiceId;
       currentVoiceId = targetVoiceId;
     } else if (filtered.some(v => v.id === currentVoiceId)) {
@@ -216,6 +286,18 @@ document.addEventListener('DOMContentLoaded', () => {
     voiceLangMeta.textContent = `${voice.langEnglish || voice.langNative} (${voice.langCode})`;
     voiceSizeMeta.textContent = sizeMB;
 
+    // Mini Tags
+    if (voiceTagsList) {
+      voiceTagsList.innerHTML = '';
+      const tags = voice.tags || [];
+      tags.forEach(t => {
+        const span = document.createElement('span');
+        span.className = 'voice-mini-tag';
+        span.textContent = t;
+        voiceTagsList.appendChild(span);
+      });
+    }
+
     // Check cache status
     piperEngine.isVoiceCached(voiceId).then((isCached) => {
       if (isCached) {
@@ -239,22 +321,32 @@ document.addEventListener('DOMContentLoaded', () => {
         speakerKeys.forEach((name) => {
           const opt = document.createElement('option');
           opt.value = speakerMap[name];
-          opt.textContent = `${name} (ID ${speakerMap[name]})`;
+          opt.textContent = `${name} (Speaker ID ${speakerMap[name]})`;
           speakerSelect.appendChild(opt);
         });
       } else {
         for (let i = 0; i < numSpeakers; i++) {
           const opt = document.createElement('option');
           opt.value = i;
-          opt.textContent = `Speaker #${i + 1}`;
+          opt.textContent = `Speaker / Persona #${i + 1}`;
           speakerSelect.appendChild(opt);
         }
       }
     } else {
       speakerRow.style.display = 'none';
-      speakerSelect.innerHTML = '<option value="0">0</option>';
+      speakerSelect.innerHTML = '<option value="0">Default Speaker (0)</option>';
     }
   }
+
+  // Tag filter pills click
+  filterTagPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      filterTagPills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeTagFilter = pill.dataset.tag;
+      populateVoiceDropdown(langFilterSelect.value, activeTagFilter);
+    });
+  });
 
   // Voice Dropdown Listeners
   voiceSelect.addEventListener('change', () => {
@@ -264,21 +356,48 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   langFilterSelect.addEventListener('change', () => {
-    populateVoiceDropdown(langFilterSelect.value);
+    populateVoiceDropdown(langFilterSelect.value, activeTagFilter);
   });
 
-  // 5. Sliders and Presets Binding
+  // 6. Sliders and FX Display Binding
   function updateSliderDisplay() {
     speedVal.textContent = parseFloat(speedRange.value).toFixed(2) + 'x';
+    const pitch = parseInt(pitchRange.value, 10);
+    pitchVal.textContent = pitch > 0 ? `+${pitch} st` : `${pitch} st`;
     noiseScaleVal.textContent = parseFloat(noiseScaleRange.value).toFixed(3);
     noiseWVal.textContent = parseFloat(noiseWRange.value).toFixed(3);
+    gapVal.textContent = parseFloat(gapRange.value).toFixed(2) + 's';
     volumeVal.textContent = Math.round(parseFloat(volumeRange.value) * 100) + '%';
+
+    // EQ
+    const b = parseInt(eqBassRange.value, 10);
+    const m = parseInt(eqMidRange.value, 10);
+    const t = parseInt(eqTrebleRange.value, 10);
+    eqBassVal.textContent = b > 0 ? `+${b} dB` : `${b} dB`;
+    eqMidVal.textContent = m > 0 ? `+${m} dB` : `${m} dB`;
+    eqTrebleVal.textContent = t > 0 ? `+${t} dB` : `${t} dB`;
+
+    // Reverb & Echo
+    reverbMixVal.textContent = Math.round(parseFloat(reverbMixRange.value) * 100) + '%';
+    echoTimeVal.textContent = echoTimeRange.value + 'ms';
+    echoFeedbackVal.textContent = Math.round(parseFloat(echoFeedbackRange.value) * 100) + '%';
+
+    // Echo controls box state
+    if (echoEnabledCheckbox.checked) {
+      echoControlsBox.style.opacity = '1';
+      echoControlsBox.style.pointerEvents = 'auto';
+    } else {
+      echoControlsBox.style.opacity = '0.4';
+      echoControlsBox.style.pointerEvents = 'none';
+    }
   }
 
-  speedRange.addEventListener('input', updateSliderDisplay);
-  noiseScaleRange.addEventListener('input', updateSliderDisplay);
-  noiseWRange.addEventListener('input', updateSliderDisplay);
-  volumeRange.addEventListener('input', updateSliderDisplay);
+  [speedRange, pitchRange, noiseScaleRange, noiseWRange, gapRange, volumeRange,
+   eqBassRange, eqMidRange, eqTrebleRange, reverbMixRange, echoTimeRange, echoFeedbackRange].forEach(input => {
+    input.addEventListener('input', updateSliderDisplay);
+  });
+
+  echoEnabledCheckbox.addEventListener('change', updateSliderDisplay);
 
   btnResetSliders.addEventListener('click', () => {
     applyPreset('natural');
@@ -288,10 +407,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const preset = PRESETS[presetKey];
     if (!preset) return;
 
-    speedRange.value = preset.speed;
-    noiseScaleRange.value = preset.noiseScale;
-    noiseWRange.value = preset.noiseW;
-    volumeRange.value = preset.volume;
+    speedRange.value = preset.speed ?? 1.0;
+    pitchRange.value = preset.pitch ?? 0;
+    noiseScaleRange.value = preset.noiseScale ?? 0.667;
+    noiseWRange.value = preset.noiseW ?? 0.800;
+    volumeRange.value = preset.volume ?? 1.0;
+    gapRange.value = preset.gap ?? 0.22;
+
+    eqBassRange.value = preset.eqBass ?? 0;
+    eqMidRange.value = preset.eqMid ?? 0;
+    eqTrebleRange.value = preset.eqTreble ?? 0;
+
+    reverbPresetSelect.value = preset.reverb ?? 'none';
+    echoEnabledCheckbox.checked = !!preset.echo;
+    specialFxSelect.value = preset.specialFx ?? 'none';
+
     updateSliderDisplay();
 
     presetButtons.forEach((btn) => {
@@ -305,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 6. Text Editor Tools & Stats
+  // 7. Text Editor Tools & Stats
   function updateTextStats() {
     const text = scriptInput.value || '';
     const charCount = text.length;
@@ -351,22 +481,22 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (sampleKey === 'en_us') {
           langFilterSelect.value = 'en';
-          populateVoiceDropdown('en', 'en_US-ryan-high');
+          populateVoiceDropdown('en', activeTagFilter, 'en_US-ryan-high');
         } else if (sampleKey === 'en_gb') {
           langFilterSelect.value = 'en';
-          populateVoiceDropdown('en', 'en_GB-alan-medium');
+          populateVoiceDropdown('en', activeTagFilter, 'en_GB-alan-medium');
         } else if (sampleKey === 'sk') {
           langFilterSelect.value = 'sk';
-          populateVoiceDropdown('sk', 'sk_SK-lili-medium');
+          populateVoiceDropdown('sk', activeTagFilter, 'sk_SK-lili-medium');
         } else if (sampleKey === 'cs') {
           langFilterSelect.value = 'cs';
-          populateVoiceDropdown('cs', 'cs_CZ-kasandra-medium');
+          populateVoiceDropdown('cs', activeTagFilter, 'cs_CZ-kasandra-medium');
         }
       }
     });
   });
 
-  // 7. Quick Voice Test Button
+  // 8. Quick Voice Test Button
   btnTestVoice.addEventListener('click', async () => {
     if (isGenerating) return;
     const voice = window.PIPER_VOICES?.[currentVoiceId];
@@ -377,7 +507,7 @@ document.addEventListener('DOMContentLoaded', () => {
     await runSynthesis(testText, true);
   });
 
-  // 8. Main Generation Trigger
+  // 9. Main Generation Trigger
   btnGenerate.addEventListener('click', () => {
     const text = scriptInput.value.trim();
     if (!text) {
@@ -401,21 +531,51 @@ document.addEventListener('DOMContentLoaded', () => {
       progressPercent.textContent = '5%';
       progressMessage.textContent = 'Preparing neural model...';
 
+      // Read all Core & DSP Parameters
       const speed = parseFloat(speedRange.value) || 1.0;
+      const pitchShift = parseInt(pitchRange.value, 10) || 0;
       const noiseScale = parseFloat(noiseScaleRange.value) || 0.667;
       const noiseW = parseFloat(noiseWRange.value) || 0.800;
+      const sentenceGap = parseFloat(gapRange.value) || 0.22;
       const volume = parseFloat(volumeRange.value) || 1.0;
       const speakerId = parseInt(speakerSelect.value, 10) || 0;
+
+      const eqBass = parseInt(eqBassRange.value, 10) || 0;
+      const eqMid = parseInt(eqMidRange.value, 10) || 0;
+      const eqTreble = parseInt(eqTrebleRange.value, 10) || 0;
+
+      const reverb = reverbPresetSelect.value || 'none';
+      const reverbMix = parseFloat(reverbMixRange.value) || 0.20;
+
+      const echoEnabled = echoEnabledCheckbox.checked;
+      const echoTimeMs = parseInt(echoTimeRange.value, 10) || 250;
+      const echoFeedback = parseFloat(echoFeedbackRange.value) || 0.35;
+
+      const specialFx = specialFxSelect.value || 'none';
+      const compressor = compressorCheckbox.checked;
       const mp3Bitrate = parseInt(mp3BitrateSelect.value, 10) || 192;
 
       const result = await piperEngine.synthesize({
         text,
         voiceId: currentVoiceId,
         speed,
+        pitchShift,
         noiseScale,
         noiseW,
         speakerId,
+        sentenceGap,
         volume,
+        eqBass,
+        eqMid,
+        eqTreble,
+        reverb,
+        reverbMix,
+        echoEnabled,
+        echoTimeMs,
+        echoFeedback,
+        echoMix: 0.30,
+        specialFx,
+        compressor,
         mp3Bitrate,
         onProgress: (prog) => {
           if (prog.percent) {
@@ -482,7 +642,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 9. Audio Player Interactivity & Waveform Scrubbing
+  // 10. Audio Player Interactivity & Waveform Scrubbing
   btnPlayPause.addEventListener('click', () => {
     if (!currentAudio.src) return;
     if (currentAudio.paused) {
@@ -499,13 +659,16 @@ document.addEventListener('DOMContentLoaded', () => {
     currentAudio.pause();
     currentAudio.currentTime = 0;
     playIcon.innerHTML = ICONS.play;
-    audioProcessor.drawWaveform(waveformCanvas, currentPcmData, 0);
+    currTimeEl.textContent = '00:00.0';
+    if (currentPcmData) {
+      audioProcessor.drawWaveform(waveformCanvas, currentPcmData, 0);
+    }
   });
 
   btnLoop.addEventListener('click', () => {
     isLooping = !isLooping;
-    currentAudio.loop = isLooping;
     btnLoop.classList.toggle('active', isLooping);
+    currentAudio.loop = isLooping;
   });
 
   playbackRateSelect.addEventListener('change', () => {
@@ -513,62 +676,70 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   currentAudio.addEventListener('timeupdate', () => {
-    const dur = currentAudio.duration || 0;
-    const cur = currentAudio.currentTime || 0;
-    currTimeEl.textContent = audioProcessor.formatDuration(cur);
-    totalTimeEl.textContent = audioProcessor.formatDuration(dur);
+    if (!currentAudio.duration) return;
+    currTimeEl.textContent = audioProcessor.formatDuration(currentAudio.currentTime);
+    totalTimeEl.textContent = audioProcessor.formatDuration(currentAudio.duration);
 
-    const progressRatio = dur > 0 ? cur / dur : 0;
-    audioProcessor.drawWaveform(waveformCanvas, currentPcmData, progressRatio);
+    const ratio = currentAudio.currentTime / currentAudio.duration;
+    if (currentPcmData) {
+      audioProcessor.drawWaveform(waveformCanvas, currentPcmData, ratio);
+    }
   });
 
   currentAudio.addEventListener('ended', () => {
     if (!isLooping) {
       playIcon.innerHTML = ICONS.play;
-      audioProcessor.drawWaveform(waveformCanvas, currentPcmData, 0);
+      if (currentPcmData) {
+        audioProcessor.drawWaveform(waveformCanvas, currentPcmData, 0);
+      }
     }
   });
 
-  // Waveform Scrubbing
-  function seekWaveform(e) {
-    if (!currentAudio.src || !currentAudio.duration) return;
-    const rect = waveformCanvas.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    const ratio = x / rect.width;
-    currentAudio.currentTime = ratio * currentAudio.duration;
-    audioProcessor.drawWaveform(waveformCanvas, currentPcmData, ratio);
-  }
-
-  waveformWrapper.addEventListener('mousedown', (e) => {
+  // Waveform interactive scrubbing
+  waveformCanvas.addEventListener('mousedown', (e) => {
+    if (!currentAudio.duration) return;
     isDraggingWaveform = true;
-    seekWaveform(e);
+    seekFromMouse(e);
   });
 
   window.addEventListener('mousemove', (e) => {
-    if (isDraggingWaveform) seekWaveform(e);
+    if (isDraggingWaveform && currentAudio.duration) {
+      seekFromMouse(e);
+    }
   });
 
   window.addEventListener('mouseup', () => {
     isDraggingWaveform = false;
   });
 
-  // 10. Downloads (MP3 & WAV)
+  function seekFromMouse(e) {
+    const rect = waveformCanvas.getBoundingClientRect();
+    const clickX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const ratio = clickX / rect.width;
+    currentAudio.currentTime = ratio * currentAudio.duration;
+    if (currentPcmData) {
+      audioProcessor.drawWaveform(waveformCanvas, currentPcmData, ratio);
+    }
+  }
+
+  // 11. Audio Exports
   btnDownloadMp3.addEventListener('click', () => {
-    if (!currentPcmData) return;
-    const bitrate = parseInt(mp3BitrateSelect.value, 10) || 192;
-    const mp3Blob = audioProcessor.pcmToMp3Blob(currentPcmData, currentSampleRate, bitrate);
-    downloadBlob(mp3Blob, `voiceover_${currentVoiceId}_${getTimestamp()}.mp3`);
+    if (!currentMp3Blob) return;
+    const voice = window.PIPER_VOICES?.[currentVoiceId];
+    const filename = `voiceover-${voice?.name || 'piper'}-${Date.now()}.mp3`;
+    downloadBlob(currentMp3Blob, filename);
   });
 
   btnDownloadWav.addEventListener('click', () => {
     if (!currentWavBlob) return;
-    downloadBlob(currentWavBlob, `voiceover_${currentVoiceId}_${getTimestamp()}.wav`);
+    const voice = window.PIPER_VOICES?.[currentVoiceId];
+    const filename = `voiceover-${voice?.name || 'piper'}-${Date.now()}.wav`;
+    downloadBlob(currentWavBlob, filename);
   });
 
   function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.style.display = 'none';
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
@@ -576,15 +747,10 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    }, 1000);
+    }, 100);
   }
 
-  function getTimestamp() {
-    const now = new Date();
-    return now.toISOString().replace(/[:.]/g, '-').substring(0, 19);
-  }
-
-  // 11. History Management
+  // 12. History Drawer
   function saveToHistory(item) {
     historyItems.unshift(item);
     if (historyItems.length > 20) historyItems.pop();
@@ -594,40 +760,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderHistory() {
     if (!historyList) return;
+    historyList.innerHTML = '';
+
     if (historyItems.length === 0) {
-      historyList.innerHTML = `
-        <div style="text-align: center; padding: 20px; color: #64748b; font-size: 0.85rem;">
-          No voice-overs generated in this session yet.
-        </div>`;
+      historyList.innerHTML = '<div class="history-empty">No generated voice-overs yet. Your studio sessions will appear here.</div>';
       return;
     }
 
-    historyList.innerHTML = '';
     historyItems.forEach((item, idx) => {
       const el = document.createElement('div');
       el.className = 'history-item';
       el.innerHTML = `
-        <div class="history-info">
-          <div class="history-text" title="${escapeHtml(item.text)}">"${escapeHtml(item.text)}"</div>
-          <div class="history-meta">
-            <span>${capitalize(item.voiceName || item.voiceId)}</span>
-            <span>&bull;</span>
-            <span>${audioProcessor.formatDuration(item.duration)}</span>
-            <span>&bull;</span>
-            <span>${item.date || ''}</span>
-          </div>
+        <div class="history-item-top">
+          <span class="history-voice">${capitalize(item.voiceName || item.voiceId)}</span>
+          <span class="history-time">${item.date} • ${item.duration ? item.duration.toFixed(1) + 's' : ''}</span>
         </div>
+        <div class="history-text">${item.text}</div>
         <div class="history-actions">
-          <button class="pill-btn btn-history-play" data-idx="${idx}">${ICONS.play} Play</button>
-          <a class="pill-btn" href="${item.mp3Url}" download="voiceover_${item.voiceId}_${idx}.mp3">${ICONS.download} MP3</a>
+          <button class="btn-hist-action btn-hist-play" data-idx="${idx}">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Play
+          </button>
+          <a class="btn-hist-action" href="${item.mp3Url}" download="voiceover-${idx + 1}.mp3">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+            MP3
+          </a>
         </div>
       `;
       historyList.appendChild(el);
     });
 
-    // Bind Play from history
-    document.querySelectorAll('.btn-history-play').forEach((btn) => {
-      btn.addEventListener('click', () => {
+    document.querySelectorAll('.btn-hist-play').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
         const idx = parseInt(btn.dataset.idx, 10);
         const item = historyItems[idx];
         if (item && item.mp3Url) {
@@ -640,51 +804,35 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   btnClearHistory.addEventListener('click', () => {
-    if (confirm('Are you sure you want to clear the entire voice-over history?')) {
+    if (confirm('Clear all recording history?')) {
       historyItems = [];
       localStorage.removeItem('piper_studio_history');
       renderHistory();
     }
   });
 
-  // 12. Modal & Cache Clean
-  btnHelp.addEventListener('click', () => helpModal.classList.add('open'));
-  btnCloseModal.addEventListener('click', () => helpModal.classList.remove('open'));
+  // 13. Help Modal & Cache Clear
+  btnHelp.addEventListener('click', () => {
+    helpModal.classList.add('active');
+  });
+
+  btnCloseModal.addEventListener('click', () => {
+    helpModal.classList.remove('active');
+  });
+
   helpModal.addEventListener('click', (e) => {
-    if (e.target === helpModal) helpModal.classList.remove('open');
+    if (e.target === helpModal) helpModal.classList.remove('active');
   });
 
   btnClearCache.addEventListener('click', async () => {
-    if (confirm('Are you sure you want to clear downloaded neural voice models from browser storage?')) {
+    if (confirm('Clear all downloaded offline voice models from browser cache?')) {
       await piperEngine.clearAllModelCache();
-      alert('Voice model cache cleared successfully.');
+      alert('Voice models cache cleared successfully!');
       updateActiveVoiceCard(currentVoiceId);
     }
   });
 
-  // 13. Keyboard Shortcuts
-  window.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault();
-      btnGenerate.click();
-    } else if (e.code === 'Space' && document.activeElement !== scriptInput && document.activeElement.tagName !== 'INPUT') {
-      e.preventDefault();
-      btnPlayPause.click();
-    }
-  });
-
-  // Helpers
-  function capitalize(str) {
-    if (!str) return '';
-    return str.charAt(0).toUpperCase() + str.slice(1);
-  }
-
-  function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  // Run initial setup
+  // Start initialization
   initVoices();
-  audioProcessor.drawWaveform(waveformCanvas, null, 0);
+  updateSliderDisplay();
 });
