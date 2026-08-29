@@ -1,0 +1,21 @@
+{
+  "name": "piper-voiceover-studio",
+  "version": "1.0.0",
+  "description": "Modern client-side neural voice-over generator based on Piper TTS, WebAssembly, and ONNX Runtime Web.",
+  "main": "index.html",
+  "scripts": {
+    "start": "python serve.py",
+    "serve": "npx serve ."
+  },
+  "keywords": [
+    "piper-tts",
+    "text-to-speech",
+    "voiceover",
+    "onnx-web",
+    "webassembly",
+    "audio-generator",
+    "mp3-export"
+  ],
+  "author": "",
+  "license": "MIT"
+}

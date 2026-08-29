@@ -1,0 +1,15 @@
+# Node
+node_modules/
+.npm/
+
+# Large ONNX binary models (streamed via CDN in production on Vercel)
+models/*.onnx
+
+# Python
+__pycache__/
+*.pyc
+
+# OS & Logs
+.DS_Store
+Thumbs.db
+*.log
