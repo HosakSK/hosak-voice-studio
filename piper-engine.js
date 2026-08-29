@@ -595,12 +595,36 @@ class PiperEngine {
           });
         }
 
-        const cleanItemText = (item.text || '').replace(/<[^>]+>/g, '').replace(/\[\/?\w+[^\]]*\]/g, '').trim();
-        if (!cleanItemText) continue;
+        let cleanItemText = (item.text || '').replace(/<[^>]+>/g, '').replace(/\[\/?\w+[^\]]*\]/g, '');
+        // Normalize unicode punctuation (curly quotes, dashes, ellipsis)
+        cleanItemText = cleanItemText
+          .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+          .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+          .replace(/[\u2013\u2014\u2015]/g, ' - ')
+          .replace(/\u2026/g, '...')
+          .replace(/\u00A0/g, ' ')
+          .trim();
 
-        const phonemeIds = await this.phonemize(cleanItemText, espeakVoice);
-        if (!phonemeIds || phonemeIds.length === 0) {
+        if (!cleanItemText || cleanItemText === '-' || cleanItemText === '.') continue;
+
+        const rawPhonemeIds = await this.phonemize(cleanItemText, espeakVoice);
+        if (!rawPhonemeIds || rawPhonemeIds.length === 0) {
           console.warn(`Phonemizer returned 0 phoneme IDs for chunk: "${cleanItemText}"`);
+          continue;
+        }
+
+        // Calculate model's maximum allowed phoneme symbol index
+        const maxSymbolIndex = (typeof config.num_symbols === 'number' && config.num_symbols > 0)
+          ? (config.num_symbols - 1)
+          : 129;
+
+        // Strictly clamp & filter phoneme IDs to prevent Gather node out-of-bounds error
+        const phonemeIds = rawPhonemeIds
+          .map(id => Number(id))
+          .filter(id => id >= 0 && id <= maxSymbolIndex);
+
+        if (phonemeIds.length === 0) {
+          console.warn(`All phoneme IDs were filtered for chunk: "${cleanItemText}"`);
           continue;
         }
 
