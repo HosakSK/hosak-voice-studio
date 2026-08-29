@@ -130,17 +130,17 @@ document.addEventListener('DOMContentLoaded', () => {
     kevan: {
       voiceId: 'en_GB-alan-medium',
       lang: 'en',
-      speed: 0.85,       // length_scale 1.18 (deliberate, dry, deadpan tempo)
-      pitch: -1,         // mature, theatrical British baritone resonance
-      noiseScale: 0.550, // reduced variability for dry, cynical, deadpan delivery
-      noiseW: 0.800,     // high clarity, crisp theatrical articulation
-      gap: 0.38,         // measured theatrical dramatic pauses
+      speed: 0.98,       // Faster, crisp and natural theatrical tempo
+      pitch: 0,          // Native pitch without granular phase artifacts
+      noiseScale: 0.333, // Low noise for crystal-clear, smooth, noise-free delivery
+      noiseW: 0.750,     // Crisp consonants without harsh hiss
+      gap: 0.25,         // Natural, clean sentence spacing
       volume: 1.05,
-      eqBass: 3,         // +3dB warmth at 120Hz
-      eqMid: 2,          // +2dB presence at 2.5kHz
-      eqTreble: 1,       // +1dB air at 8kHz
-      reverb: 'booth',   // treated dry vocal booth
-      reverbMix: 0.16,
+      eqBass: 2,         // Subtle warmth at 120Hz
+      eqMid: 1,          // Vocal clarity at 2.5kHz
+      eqTreble: 0,       // Neutral treble (no noise boost)
+      reverb: 'none',    // 100% Dry in-ear studio presence (zero echo/reverb)
+      reverbMix: 0.00,
       echo: false,
       specialFx: 'none',
       compressor: true
