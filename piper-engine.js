@@ -358,59 +358,76 @@ class PiperEngine {
   }
 
   /**
-   * Parse text with full support for:
-   * - SSML tags: <prosody pitch="..." rate="..." volume="...">, <emphasis>, <break time="..."/>
-   * - Studio tags: [pitch +6]...[/pitch], [speed 1.3]...[/speed], [loud]...[/loud], [whisper]...[/whisper], [robot], [radio], [pause 500ms]
-   * - Natural sentences and sentenceGap slider
+   * Parse text into speech segments and exact silence pauses
+   * Uses stack-based parser supporting deeply nested tags:
+   * - [pause 400ms], <break time="400ms"/>
+   * - [pitch +8][loud]Yes![/loud][/pitch] (nested combinations)
+   * - [slow][pitch -3]...[/pitch][/slow]
+   * - <prosody pitch="+70%">...</prosody>
+   * - Strips all XML/bracket syntax to prevent TTS reading "slash"
    */
   parseScriptWithPauses(text, defaultSentenceGap = 0.22) {
     if (!text || text.trim().length === 0) return [];
 
     let cleaned = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-    // 1. Normalize Studio bracket tags to standard SSML-like XML tags
-    cleaned = cleaned.replace(/\[(?:pause|pauza)(?:\s+(\d+(?:\.\d+)?)\s*(ms|s|sek)?)?\]/gi, (m, val, unit) => {
-      const dur = val ? `${val}${unit || 'ms'}` : `${Math.round((defaultSentenceGap || 0.35) * 1000)}ms`;
-      return `<break time="${dur}"/>`;
-    });
+    // Token pattern matching:
+    // 1. Pauses: [pause ...], [pauza ...], <break .../>
+    // 2. Bracket tags: [pitch ...], [/pitch], [speed ...], [/speed], [loud], [/loud], [slow], [/slow], etc.
+    // 3. XML tags: <prosody ...>, </prosody>, <emphasis ...>, </emphasis>
+    const tokenRegex = /(\[(?:pause|pauza)(?:\s+(\d+(?:\.\d+)?)\s*(ms|s|sek)?)?\])|(<break\s+time=["']?([^"'>]+)["']?\s*\/?>)|(\[\/?(?:pitch|speed|loud|soft|whisper|robot|radio|high|deep|fast|slow)(?:\s+[^\]]+)?\])|(<\/?(?:prosody|emphasis)(?:\s+[^>]+)?>)/gi;
 
-    cleaned = cleaned.replace(/\[pitch\s+([+-]?\d+(?:\.\d+)?(?:st|%)?)\]([\s\S]*?)\[\/pitch\]/gi, (m, p, content) => {
-      return `<prosody pitch="${p}">${content}</prosody>`;
-    });
-    cleaned = cleaned.replace(/\[high\]([\s\S]*?)\[\/high\]/gi, '<prosody pitch="high">$1</prosody>');
-    cleaned = cleaned.replace(/\[deep\]([\s\S]*?)\[\/deep\]/gi, '<prosody pitch="low">$1</prosody>');
+    const stack = [{
+      pitchShift: 0,
+      speedMultiplier: 1.0,
+      volumeMultiplier: 1.0,
+      fx: 'none'
+    }];
 
-    cleaned = cleaned.replace(/\[speed\s+(\d+(?:\.\d+)?x?)\]([\s\S]*?)\[\/speed\]/gi, (m, r, content) => {
-      return `<prosody rate="${r.replace('x', '')}">${content}</prosody>`;
-    });
-    cleaned = cleaned.replace(/\[fast\]([\s\S]*?)\[\/fast\]/gi, '<prosody rate="fast">$1</prosody>');
-    cleaned = cleaned.replace(/\[slow\]([\s\S]*?)\[\/slow\]/gi, '<prosody rate="slow">$1</prosody>');
-
-    cleaned = cleaned.replace(/\[loud\]([\s\S]*?)\[\/loud\]/gi, '<prosody volume="loud">$1</prosody>');
-    cleaned = cleaned.replace(/\[soft\]([\s\S]*?)\[\/soft\]/gi, '<prosody volume="soft">$1</prosody>');
-    cleaned = cleaned.replace(/\[whisper\]([\s\S]*?)\[\/whisper\]/gi, '<prosody fx="whisper" volume="soft">$1</prosody>');
-    cleaned = cleaned.replace(/\[robot\]([\s\S]*?)\[\/robot\]/gi, '<prosody fx="robot">$1</prosody>');
-    cleaned = cleaned.replace(/\[radio\]([\s\S]*?)\[\/radio\]/gi, '<prosody fx="radio">$1</prosody>');
-
-    // 2. Tokenize SSML and text segments
-    // Matches: <break time="..."/>, <prosody ...>...</prosody>, <emphasis ...>...</emphasis>
-    const tagRegex = /(<break\s+time=["']?([^"'>]+)["']?\s*\/?>)|(<prosody\s+([^>]+)>([\s\S]*?)<\/prosody>)|(<emphasis(?:\s+level=["']?([^"'>]+)["']?)?>([\s\S]*?)<\/emphasis>)/gi;
-
-    let lastIdx = 0;
+    let lastIndex = 0;
     let match;
     const items = [];
 
-    while ((match = tagRegex.exec(cleaned)) !== null) {
-      // Push any preceding text
-      const preText = cleaned.substring(lastIdx, match.index).trim();
-      if (preText.length > 0) {
-        this.pushTextOrSentences(items, preText, defaultSentenceGap);
-      }
-      lastIdx = tagRegex.lastIndex;
+    const currentStyle = () => stack[stack.length - 1];
 
+    const addTextChunk = (raw) => {
+      if (!raw) return;
+      // Strip any lingering stray tags or brackets
+      const cleanText = raw.replace(/<[^>]+>/g, '').replace(/\[\/?\w+[^\]]*\]/g, '').trim();
+      if (cleanText.length > 0 && cleanText !== '.' && cleanText !== '—') {
+        const st = currentStyle();
+        items.push({
+          type: 'text',
+          text: cleanText,
+          pitchShift: st.pitchShift,
+          speedMultiplier: st.speedMultiplier,
+          volumeMultiplier: st.volumeMultiplier,
+          fx: st.fx
+        });
+      }
+    };
+
+    while ((match = tokenRegex.exec(cleaned)) !== null) {
+      const textBetween = cleaned.substring(lastIndex, match.index);
+      if (textBetween) {
+        addTextChunk(textBetween);
+      }
+      lastIndex = tokenRegex.lastIndex;
+
+      // Case 1: Pause / Break tag
       if (match[1]) {
-        // <break time="..."/>
-        const timeStr = match[2] ? match[2].trim().toLowerCase() : '350ms';
+        // [pause 400ms]
+        const val = match[2] ? parseFloat(match[2]) : null;
+        const unit = match[3] ? match[3].toLowerCase() : (val && val >= 10 ? 'ms' : 's');
+        let durSec = defaultSentenceGap || 0.35;
+        if (val !== null) {
+          durSec = (unit === 'ms') ? (val / 1000) : val;
+        }
+        items.push({ type: 'pause', durationSec: Math.max(0.05, Math.min(10.0, durSec)) });
+
+      } else if (match[4]) {
+        // <break time="400ms"/>
+        const timeStr = match[5] ? match[5].trim().toLowerCase() : '350ms';
         let durSec = 0.35;
         if (timeStr.endsWith('ms')) {
           durSec = parseFloat(timeStr) / 1000;
@@ -422,73 +439,90 @@ class PiperEngine {
         }
         items.push({ type: 'pause', durationSec: Math.max(0.05, Math.min(10.0, durSec || 0.35)) });
 
-      } else if (match[3]) {
-        // <prosody attr="...">content</prosody>
-        const attrStr = match[4] || '';
-        const content = (match[5] || '').trim();
-        if (content.length > 0) {
-          const pitchMatch = attrStr.match(/pitch=["']?([^"'\s>]+)["']?/i);
-          const rateMatch = attrStr.match(/rate=["']?([^"'\s>]+)["']?/i);
-          const volumeMatch = attrStr.match(/volume=["']?([^"'\s>]+)["']?/i);
-          const fxMatch = attrStr.match(/fx=["']?([^"'\s>]+)["']?/i);
+      // Case 2: Bracket Tags [pitch ...], [/pitch], [loud], [/loud], etc.
+      } else if (match[6]) {
+        const tagStr = match[6];
+        if (tagStr.startsWith('[/')) {
+          // Closing bracket tag -> pop stack
+          if (stack.length > 1) {
+            stack.pop();
+          }
+        } else {
+          // Opening bracket tag -> push new state
+          const prev = currentStyle();
+          const next = { ...prev };
 
-          const pitchShift = pitchMatch ? this.parsePitchToSemitones(pitchMatch[1]) : 0;
-          const speedMultiplier = rateMatch ? this.parseRateToMultiplier(rateMatch[1]) : 1.0;
-          const volumeMultiplier = volumeMatch ? this.parseVolumeToMultiplier(volumeMatch[1]) : 1.0;
-          const fx = fxMatch ? fxMatch[1].toLowerCase() : 'none';
+          if (/^\[pitch\s+([+-]?\d+(?:\.\d+)?(?:st|%)?)\]/i.test(tagStr)) {
+            const m = tagStr.match(/^\[pitch\s+([+-]?\d+(?:\.\d+)?(?:st|%)?)\]/i);
+            next.pitchShift = prev.pitchShift + this.parsePitchToSemitones(m[1]);
+          } else if (/^\[high\]/i.test(tagStr)) {
+            next.pitchShift = prev.pitchShift + 4;
+          } else if (/^\[deep\]/i.test(tagStr)) {
+            next.pitchShift = prev.pitchShift - 4;
+          } else if (/^\[speed\s+(\d+(?:\.\d+)?x?)\]/i.test(tagStr)) {
+            const m = tagStr.match(/^\[speed\s+(\d+(?:\.\d+)?x?)\]/i);
+            next.speedMultiplier = prev.speedMultiplier * this.parseRateToMultiplier(m[1].replace('x', ''));
+          } else if (/^\[fast\]/i.test(tagStr)) {
+            next.speedMultiplier = prev.speedMultiplier * 1.25;
+          } else if (/^\[slow\]/i.test(tagStr)) {
+            next.speedMultiplier = prev.speedMultiplier * 0.80;
+          } else if (/^\[loud\]/i.test(tagStr)) {
+            next.volumeMultiplier = prev.volumeMultiplier * 1.30;
+          } else if (/^\[soft\]/i.test(tagStr)) {
+            next.volumeMultiplier = prev.volumeMultiplier * 0.70;
+          } else if (/^\[whisper\]/i.test(tagStr)) {
+            next.volumeMultiplier = prev.volumeMultiplier * 0.65;
+            next.fx = 'whisper';
+          } else if (/^\[robot\]/i.test(tagStr)) {
+            next.fx = 'robot';
+          } else if (/^\[radio\]/i.test(tagStr)) {
+            next.fx = 'radio';
+          }
 
-          items.push({
-            type: 'text',
-            text: content,
-            pitchShift,
-            speedMultiplier,
-            volumeMultiplier,
-            fx
-          });
+          stack.push(next);
         }
 
-      } else if (match[6]) {
-        // <emphasis>content</emphasis>
-        const content = (match[8] || '').trim();
-        if (content.length > 0) {
-          items.push({
-            type: 'text',
-            text: content,
-            pitchShift: 1.5,
-            speedMultiplier: 0.95,
-            volumeMultiplier: 1.25,
-            fx: 'none'
-          });
+      // Case 3: XML SSML tags <prosody ...>, </prosody>, <emphasis>, </emphasis>
+      } else if (match[7]) {
+        const xmlTag = match[7];
+        if (xmlTag.startsWith('</')) {
+          // Closing XML tag -> pop stack
+          if (stack.length > 1) {
+            stack.pop();
+          }
+        } else {
+          // Opening XML tag
+          const prev = currentStyle();
+          const next = { ...prev };
+
+          if (/^<prosody\b/i.test(xmlTag)) {
+            const pitchMatch = xmlTag.match(/pitch=["']?([^"'\s>]+)["']?/i);
+            const rateMatch = xmlTag.match(/rate=["']?([^"'\s>]+)["']?/i);
+            const volumeMatch = xmlTag.match(/volume=["']?([^"'\s>]+)["']?/i);
+            const fxMatch = xmlTag.match(/fx=["']?([^"'\s>]+)["']?/i);
+
+            if (pitchMatch) next.pitchShift = prev.pitchShift + this.parsePitchToSemitones(pitchMatch[1]);
+            if (rateMatch) next.speedMultiplier = prev.speedMultiplier * this.parseRateToMultiplier(rateMatch[1]);
+            if (volumeMatch) next.volumeMultiplier = prev.volumeMultiplier * this.parseVolumeToMultiplier(volumeMatch[1]);
+            if (fxMatch) next.fx = fxMatch[1].toLowerCase();
+
+          } else if (/^<emphasis\b/i.test(xmlTag)) {
+            next.pitchShift = prev.pitchShift + 1.5;
+            next.volumeMultiplier = prev.volumeMultiplier * 1.25;
+          }
+
+          stack.push(next);
         }
       }
     }
 
-    // Push remaining tail text
-    const tailText = cleaned.substring(lastIdx).trim();
-    if (tailText.length > 0) {
-      this.pushTextOrSentences(items, tailText, defaultSentenceGap);
+    // Add any trailing text
+    const tailText = cleaned.substring(lastIndex);
+    if (tailText) {
+      addTextChunk(tailText);
     }
 
     return items.length > 0 ? items : [{ type: 'text', text: cleaned.trim(), pitchShift: 0, speedMultiplier: 1.0, volumeMultiplier: 1.0, fx: 'none' }];
-  }
-
-  /**
-   * Helper to push plain text or sentence chunks
-   */
-  pushTextOrSentences(items, rawText, defaultSentenceGap) {
-    if (!rawText || rawText.trim().length === 0) return;
-    
-    const cleaned = rawText.trim();
-    if (!cleaned || cleaned === '.') return;
-
-    items.push({
-      type: 'text',
-      text: cleaned,
-      pitchShift: 0,
-      speedMultiplier: 1.0,
-      volumeMultiplier: 1.0,
-      fx: 'none'
-    });
   }
 
   /**
@@ -561,9 +595,12 @@ class PiperEngine {
           });
         }
 
-        const phonemeIds = await this.phonemize(item.text, espeakVoice);
+        const cleanItemText = (item.text || '').replace(/<[^>]+>/g, '').replace(/\[\/?\w+[^\]]*\]/g, '').trim();
+        if (!cleanItemText) continue;
+
+        const phonemeIds = await this.phonemize(cleanItemText, espeakVoice);
         if (!phonemeIds || phonemeIds.length === 0) {
-          console.warn(`Phonemizer returned 0 phoneme IDs for chunk: "${item.text}"`);
+          console.warn(`Phonemizer returned 0 phoneme IDs for chunk: "${cleanItemText}"`);
           continue;
         }
 
