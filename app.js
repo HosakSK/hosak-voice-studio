@@ -130,20 +130,22 @@ document.addEventListener('DOMContentLoaded', () => {
     kevan: {
       voiceId: 'en_GB-alan-medium',
       lang: 'en',
-      speed: 0.98,       // Faster, crisp and natural theatrical tempo
-      pitch: 0,          // Native pitch without granular phase artifacts
-      noiseScale: 0.333, // Low noise for crystal-clear, smooth, noise-free delivery
-      noiseW: 0.750,     // Crisp consonants without harsh hiss
-      gap: 0.25,         // Natural, clean sentence spacing
-      volume: 1.05,
-      eqBass: 2,         // Subtle warmth at 120Hz
-      eqMid: 1,          // Vocal clarity at 2.5kHz
-      eqTreble: 0,       // Neutral treble (no noise boost)
-      reverb: 'none',    // 100% Dry in-ear studio presence (zero echo/reverb)
-      reverbMix: 0.00,
-      echo: false,
-      specialFx: 'none',
-      compressor: true
+      speed: 1.20,       // 1.20x Speaking Speed (Tempo)
+      pitch: 0,          // 0 st Pitch Transposition
+      noiseScale: 0.620, // 0.620 Tone Variability / Expression
+      noiseW: 0.900,     // 0.900 Phoneme Cadence & Rhythm
+      gap: 0.35,         // 0.35s Sentence Pause Gap
+      volume: 1.00,      // 100% Master Volume / Gain
+      eqBass: -1,        // -1 dB Bass (120Hz)
+      eqMid: 1,          // +1 dB Presence (2.5kHz)
+      eqTreble: -4,      // -4 dB Air (8kHz)
+      reverb: 'none',    // Dry (No Reverb)
+      reverbMix: 0.20,   // 20% Reverb Wet Mix
+      echo: false,       // Studio Echo & Delay (Off)
+      echoTimeMs: 250,   // 250ms Delay Time
+      echoFeedback: 0.35,// 35% Feedback
+      specialFx: 'none', // None (Clean Vocal)
+      compressor: true   // Broadcast Dynamics Compressor (On)
     },
     natural: { speed: 1.00, pitch: 0, noiseScale: 0.667, noiseW: 0.800, volume: 1.00, gap: 0.22, eqBass: 0, eqMid: 0, eqTreble: 0, reverb: 'none', echo: false, specialFx: 'none', compressor: true },
     fast: { speed: 1.25, pitch: 0, noiseScale: 0.667, noiseW: 0.750, volume: 1.10, gap: 0.15, eqBass: 1, eqMid: 2, eqTreble: 1, reverb: 'none', echo: false, specialFx: 'none', compressor: true },
@@ -445,6 +447,8 @@ document.addEventListener('DOMContentLoaded', () => {
     reverbPresetSelect.value = preset.reverb ?? 'none';
     reverbMixRange.value = preset.reverbMix ?? 0.20;
     echoEnabledCheckbox.checked = !!preset.echo;
+    if (preset.echoTimeMs) echoTimeRange.value = preset.echoTimeMs;
+    if (preset.echoFeedback !== undefined) echoFeedbackRange.value = preset.echoFeedback;
     specialFxSelect.value = preset.specialFx ?? 'none';
     compressorCheckbox.checked = preset.compressor !== undefined ? preset.compressor : true;
 
