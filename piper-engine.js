@@ -7,7 +7,7 @@
 
 class PiperEngine {
   constructor(audioProcessor) {
-    this.audioProcessor = audioProcessor || new window.AudioProcessor();
+    this.audioProcessor = audioProcessor || (typeof window !== 'undefined' && window.AudioProcessor ? new window.AudioProcessor() : null);
     this.activeVoiceId = null;
     this.activeSession = null;
     this.activeModelConfig = null;
@@ -299,52 +299,92 @@ class PiperEngine {
   }
 
   /**
-   * Prepare text into coherent paragraph chunks for continuous neural synthesis
-   * (Keeps full sentences together in continuous takes for natural human melody)
+   * Parse text into speech segments and exact silence pauses
+   * Strictly respects:
+   * - [pause 500ms], [pause 1.2s], [pause 400], [pauza 800ms], [pause]
+   * - Sentence boundaries respecting the configured sentenceGap slider
+   * - Paragraph breaks
    */
-  splitIntoSentences(text) {
-    if (!text) return [];
-    
-    // Convert custom pause tags [pause 500ms] to natural ellipsis pauses
-    let normalized = text.replace(/\[(pause|pauza)\s*(\d*m?s?)?\]/gi, '... ');
-    
-    // Normalize newlines
-    normalized = normalized.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  parseScriptWithPauses(text, defaultSentenceGap = 0.22) {
+    if (!text || text.trim().length === 0) return [];
 
-    // If script is short to medium length (under ~1200 chars), synthesize in 1 continuous pass!
-    if (normalized.length <= 1200) {
-      return [normalized];
-    }
+    let cleaned = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-    // For longer texts, split ONLY on distinct paragraphs (2+ newlines) or large logical blocks
-    const rawParagraphs = normalized.split(/\n{2,}/);
-    const validChunks = [];
+    // 1. Check if there are explicit [pause ...] or [pauza ...] tags
+    const pauseTagRegex = /\[(?:pause|pauza)(?:\s+(\d+(?:\.\d+)?)\s*(ms|s|sek)?)?\]/gi;
+    const hasExplicitPauseTags = pauseTagRegex.test(cleaned);
+    pauseTagRegex.lastIndex = 0; // reset regex index
 
-    for (const para of rawParagraphs) {
-      const trimmed = para.trim();
-      if (!trimmed) continue;
-
-      if (trimmed.length > 1200) {
-        // Break only exceptionally large paragraphs on sentence boundaries
-        const sentenceSplits = trimmed.split(/(?<=[.!?…])\s+/);
-        let currentBlock = '';
-        for (const s of sentenceSplits) {
-          if ((currentBlock + ' ' + s).length > 1000 && currentBlock.length > 0) {
-            validChunks.push(currentBlock.trim());
-            currentBlock = s;
+    if (hasExplicitPauseTags) {
+      // Replace tags with unique delimiter token
+      const marked = cleaned.replace(pauseTagRegex, (match, valStr, unit) => {
+        let durSec = defaultSentenceGap || 0.35;
+        if (valStr) {
+          const val = parseFloat(valStr);
+          if (unit && (unit.toLowerCase() === 's' || unit.toLowerCase() === 'sek')) {
+            durSec = val;
+          } else if (unit && unit.toLowerCase() === 'ms') {
+            durSec = val / 1000;
           } else {
-            currentBlock = currentBlock ? (currentBlock + ' ' + s) : s;
+            durSec = val >= 10 ? val / 1000 : val;
           }
         }
-        if (currentBlock.trim().length > 0) {
-          validChunks.push(currentBlock.trim());
+        return `\n__EXPLICIT_PAUSE_${durSec.toFixed(3)}__\n`;
+      });
+
+      const lines = marked.split('\n');
+      const items = [];
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        const pauseMatch = trimmed.match(/^__EXPLICIT_PAUSE_(\d+\.\d+)__$/);
+        if (pauseMatch) {
+          const dur = parseFloat(pauseMatch[1]);
+          items.push({ type: 'pause', durationSec: Math.max(0.05, Math.min(10.0, dur)) });
+        } else {
+          // Normal speech text - clean leading/trailing ellipsis helper marks
+          const cleanText = trimmed.replace(/^\s*\.\.\.\s*/, '').replace(/\s*\.\.\.\s*$/, '').trim();
+          if (cleanText.length > 0) {
+            items.push({ type: 'text', text: cleanText });
+          }
         }
-      } else {
-        validChunks.push(trimmed);
+      }
+
+      return items;
+    }
+
+    // 2. If no explicit [pause ...] tags, parse by paragraphs and sentences respecting the sentenceGap slider
+    const rawParagraphs = cleaned.split(/\n{2,}/);
+    const items = [];
+    const sentenceGapSec = Math.max(0.05, defaultSentenceGap);
+
+    for (let pIdx = 0; pIdx < rawParagraphs.length; pIdx++) {
+      const para = rawParagraphs[pIdx].trim();
+      if (!para) continue;
+
+      const sentences = para.split(/(?<=[.!?…])\s+/);
+
+      for (let sIdx = 0; sIdx < sentences.length; sIdx++) {
+        const sent = sentences[sIdx].trim();
+        if (sent.length > 0) {
+          items.push({ type: 'text', text: sent });
+
+          // Add configured sentence gap between sentences
+          if (sIdx < sentences.length - 1) {
+            items.push({ type: 'pause', durationSec: sentenceGapSec });
+          }
+        }
+      }
+
+      // Add paragraph gap between paragraphs
+      if (pIdx < rawParagraphs.length - 1) {
+        items.push({ type: 'pause', durationSec: Math.max(sentenceGapSec * 1.5, 0.45) });
       }
     }
 
-    return validChunks.length > 0 ? validChunks : [normalized];
+    return items.length > 0 ? items : [{ type: 'text', text: cleaned.trim() }];
   }
 
   /**
@@ -388,73 +428,82 @@ class PiperEngine {
     const finalNoiseScale = Number(noiseScale) || config.inference?.noise_scale || 0.667;
     const finalNoiseW = Number(noiseW) || config.inference?.noise_w || 0.800;
 
-    const chunks = this.splitIntoSentences(text);
+    const items = this.parseScriptWithPauses(text, sentenceGap);
     const pcmChunks = [];
+    const textItems = items.filter(it => it.type === 'text');
+    const totalTextItems = textItems.length;
+    let textIndex = 0;
 
-    if (onProgress) onProgress({ stage: 'synthesis_start', message: `Synthesizing ${chunks.length > 1 ? chunks.length + ' paragraph(s)' : 'full continuous audio'}...`, percent: 10 });
+    if (onProgress) onProgress({ stage: 'synthesis_start', message: `Synthesizing ${totalTextItems} section(s)...`, percent: 10 });
 
-    const totalChunks = chunks.length;
+    for (const item of items) {
+      if (item.type === 'pause') {
+        // Insert exact configured silence block
+        const silenceSamples = Math.round(sampleRate * item.durationSec);
+        if (silenceSamples > 0) {
+          pcmChunks.push(new Float32Array(silenceSamples));
+        }
+      } else if (item.type === 'text') {
+        textIndex++;
+        const percentStart = 10 + Math.round((textIndex / totalTextItems) * 75);
 
-    for (let i = 0; i < totalChunks; i++) {
-      const chunkText = chunks[i];
-      const percentStart = 10 + Math.round((i / totalChunks) * 75);
+        if (onProgress) {
+          onProgress({
+            stage: 'synthesizing',
+            message: totalTextItems > 1 
+              ? `Synthesizing section ${textIndex} of ${totalTextItems}: "${item.text.substring(0, 30)}${item.text.length > 30 ? '...' : ''}"`
+              : 'Synthesizing voice...',
+            percent: percentStart,
+            sentenceIndex: textIndex,
+            totalSentences: totalTextItems
+          });
+        }
 
-      if (onProgress) {
-        onProgress({
-          stage: 'synthesizing',
-          message: totalChunks > 1 
-            ? `Synthesizing paragraph ${i + 1} of ${totalChunks}...`
-            : 'Synthesizing full voice take in single continuous pass...',
-          percent: percentStart,
-          sentenceIndex: i,
-          totalSentences: totalChunks
-        });
-      }
+        const phonemeIds = await this.phonemize(item.text, espeakVoice);
+        if (!phonemeIds || phonemeIds.length === 0) {
+          console.warn(`Phonemizer returned 0 phoneme IDs for chunk: "${item.text}"`);
+          continue;
+        }
 
-      const phonemeIds = await this.phonemize(chunkText, espeakVoice);
-      if (!phonemeIds || phonemeIds.length === 0) {
-        console.warn(`Phonemizer returned 0 phoneme IDs for chunk: "${chunkText}"`);
-        continue;
-      }
-
-      const inputTensor = new window.ort.Tensor(
-        'int64',
-        BigInt64Array.from(phonemeIds.map(BigInt)),
-        [1, phonemeIds.length]
-      );
-      
-      const inputLengthsTensor = new window.ort.Tensor(
-        'int64',
-        BigInt64Array.from([BigInt(phonemeIds.length)]),
-        [1]
-      );
-
-      const scalesTensor = new window.ort.Tensor(
-        'float32',
-        Float32Array.from([finalNoiseScale, calculatedLengthScale, finalNoiseW]),
-        [3]
-      );
-
-      const feeds = {
-        input: inputTensor,
-        input_lengths: inputLengthsTensor,
-        scales: scalesTensor
-      };
-
-      const numSpeakers = config.num_speakers || 1;
-      const hasSpeakerMap = config.speaker_id_map && Object.keys(config.speaker_id_map).length > 0;
-      if (numSpeakers > 1 || hasSpeakerMap) {
-        feeds.sid = new window.ort.Tensor(
+        const inputTensor = new window.ort.Tensor(
           'int64',
-          BigInt64Array.from([BigInt(speakerId || 0)]),
+          BigInt64Array.from(phonemeIds.map(BigInt)),
+          [1, phonemeIds.length]
+        );
+        
+        const inputLengthsTensor = new window.ort.Tensor(
+          'int64',
+          BigInt64Array.from([BigInt(phonemeIds.length)]),
           [1]
         );
-      }
 
-      const results = await session.run(feeds);
-      const outputTensor = results.output || Object.values(results)[0];
-      if (outputTensor && outputTensor.data) {
-        pcmChunks.push(outputTensor.data);
+        const scalesTensor = new window.ort.Tensor(
+          'float32',
+          Float32Array.from([finalNoiseScale, calculatedLengthScale, finalNoiseW]),
+          [3]
+        );
+
+        const feeds = {
+          input: inputTensor,
+          input_lengths: inputLengthsTensor,
+          scales: scalesTensor
+        };
+
+        const numSpeakers = config.num_speakers || 1;
+        const hasSpeakerMap = config.speaker_id_map && Object.keys(config.speaker_id_map).length > 0;
+        if (numSpeakers > 1 || hasSpeakerMap) {
+          feeds.sid = new window.ort.Tensor(
+            'int64',
+            BigInt64Array.from([BigInt(speakerId || 0)]),
+            [1]
+          );
+        }
+
+        const results = await session.run(feeds);
+        const outputTensor = results.output || Object.values(results)[0];
+        if (outputTensor && outputTensor.data) {
+          pcmChunks.push(outputTensor.data);
+        }
       }
     }
 
@@ -464,7 +513,8 @@ class PiperEngine {
 
     if (onProgress) onProgress({ stage: 'processing', message: 'Applying studio DSP mastering & safe zone...', percent: 88 });
 
-    const rawCombinedPcm = this.audioProcessor.concatenatePcmChunks(pcmChunks, sampleRate, sentenceGap);
+    // Concatenate chunks directly (chunks already contain exact pause silences)
+    const rawCombinedPcm = this.audioProcessor.concatenatePcmChunks(pcmChunks, sampleRate, 0);
 
     const processedPcm = this.audioProcessor.processAudioEffects(rawCombinedPcm, {
       gain: volume,
@@ -521,7 +571,7 @@ class PiperEngine {
    * Clear cached models
    */
   async clearAllModelCache() {
-    if ('caches' in window) {
+    if (typeof window !== 'undefined' && 'caches' in window) {
       await caches.delete(this.cacheName);
       this.cachedSessions.clear();
       return true;
@@ -530,4 +580,9 @@ class PiperEngine {
   }
 }
 
-window.PiperEngine = PiperEngine;
+if (typeof window !== 'undefined') {
+  window.PiperEngine = PiperEngine;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = PiperEngine;
+}
