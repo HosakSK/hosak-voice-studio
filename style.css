@@ -202,7 +202,7 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
 }
 
 @media (max-width: 1024px) {
@@ -331,13 +331,25 @@ body {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+.text-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .textarea-container {
   position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
 }
 
 .script-textarea {
   width: 100%;
-  min-height: 240px;
+  flex: 1;
+  min-height: 300px;
+  height: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);

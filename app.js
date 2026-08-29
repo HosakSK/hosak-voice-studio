@@ -138,9 +138,9 @@ document.addEventListener('DOMContentLoaded', () => {
       volume: 1.00,      // 100% Master Volume / Gain
       eqBass: -1,        // -1 dB Bass (120Hz)
       eqMid: 1,          // +1 dB Presence (2.5kHz)
-      eqTreble: -4,      // -4 dB Air (8kHz)
+      eqTreble: -2,      // -2 dB Air (8kHz)
       reverb: 'none',    // Dry (No Reverb)
-      reverbMix: 0.20,   // 20% Reverb Wet Mix
+      reverbMix: 0.00,   // 0% Reverb Wet Mix
       echo: false,       // Studio Echo & Delay (Off)
       echoTimeMs: 250,   // 250ms Delay Time
       echoFeedback: 0.35,// 35% Feedback
