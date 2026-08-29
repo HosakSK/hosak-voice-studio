@@ -299,30 +299,52 @@ class PiperEngine {
   }
 
   /**
-   * Split long text into natural sentence chunks
+   * Prepare text into coherent paragraph chunks for continuous neural synthesis
+   * (Keeps full sentences together in continuous takes for natural human melody)
    */
   splitIntoSentences(text) {
     if (!text) return [];
     
+    // Convert custom pause tags [pause 500ms] to natural ellipsis pauses
     let normalized = text.replace(/\[(pause|pauza)\s*(\d*m?s?)?\]/gi, '... ');
-    const rawChunks = normalized.split(/(?<=[.!?\n;])\s+/);
+    
+    // Normalize newlines
+    normalized = normalized.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+
+    // If script is short to medium length (under ~1200 chars), synthesize in 1 continuous pass!
+    if (normalized.length <= 1200) {
+      return [normalized];
+    }
+
+    // For longer texts, split ONLY on distinct paragraphs (2+ newlines) or large logical blocks
+    const rawParagraphs = normalized.split(/\n{2,}/);
     const validChunks = [];
 
-    for (const chunk of rawChunks) {
-      const trimmed = chunk.trim();
-      if (trimmed.length > 0) {
-        if (trimmed.length > 300) {
-          const subChunks = trimmed.split(/(?<=[,])\s+/);
-          for (const sub of subChunks) {
-            if (sub.trim().length > 0) validChunks.push(sub.trim());
+    for (const para of rawParagraphs) {
+      const trimmed = para.trim();
+      if (!trimmed) continue;
+
+      if (trimmed.length > 1200) {
+        // Break only exceptionally large paragraphs on sentence boundaries
+        const sentenceSplits = trimmed.split(/(?<=[.!?…])\s+/);
+        let currentBlock = '';
+        for (const s of sentenceSplits) {
+          if ((currentBlock + ' ' + s).length > 1000 && currentBlock.length > 0) {
+            validChunks.push(currentBlock.trim());
+            currentBlock = s;
+          } else {
+            currentBlock = currentBlock ? (currentBlock + ' ' + s) : s;
           }
-        } else {
-          validChunks.push(trimmed);
         }
+        if (currentBlock.trim().length > 0) {
+          validChunks.push(currentBlock.trim());
+        }
+      } else {
+        validChunks.push(trimmed);
       }
     }
 
-    return validChunks.length > 0 ? validChunks : [text.trim()];
+    return validChunks.length > 0 ? validChunks : [normalized];
   }
 
   /**
@@ -366,30 +388,32 @@ class PiperEngine {
     const finalNoiseScale = Number(noiseScale) || config.inference?.noise_scale || 0.667;
     const finalNoiseW = Number(noiseW) || config.inference?.noise_w || 0.800;
 
-    const sentences = this.splitIntoSentences(text);
+    const chunks = this.splitIntoSentences(text);
     const pcmChunks = [];
 
-    if (onProgress) onProgress({ stage: 'synthesis_start', message: `Synthesizing ${sentences.length} sentence(s)...`, percent: 10 });
+    if (onProgress) onProgress({ stage: 'synthesis_start', message: `Synthesizing ${chunks.length > 1 ? chunks.length + ' paragraph(s)' : 'full continuous audio'}...`, percent: 10 });
 
-    const totalSentences = sentences.length;
+    const totalChunks = chunks.length;
 
-    for (let i = 0; i < totalSentences; i++) {
-      const sentence = sentences[i];
-      const sentencePercentStart = 10 + Math.round((i / totalSentences) * 75);
+    for (let i = 0; i < totalChunks; i++) {
+      const chunkText = chunks[i];
+      const percentStart = 10 + Math.round((i / totalChunks) * 75);
 
       if (onProgress) {
         onProgress({
           stage: 'synthesizing',
-          message: `Synthesizing sentence ${i + 1} of ${totalSentences}: "${sentence.substring(0, 30)}${sentence.length > 30 ? '...' : ''}"`,
-          percent: sentencePercentStart,
+          message: totalChunks > 1 
+            ? `Synthesizing paragraph ${i + 1} of ${totalChunks}...`
+            : 'Synthesizing full voice take in single continuous pass...',
+          percent: percentStart,
           sentenceIndex: i,
-          totalSentences
+          totalSentences: totalChunks
         });
       }
 
-      const phonemeIds = await this.phonemize(sentence, espeakVoice);
+      const phonemeIds = await this.phonemize(chunkText, espeakVoice);
       if (!phonemeIds || phonemeIds.length === 0) {
-        console.warn(`Phonemizer returned 0 phoneme IDs for sentence: "${sentence}"`);
+        console.warn(`Phonemizer returned 0 phoneme IDs for chunk: "${chunkText}"`);
         continue;
       }
 
@@ -438,7 +462,7 @@ class PiperEngine {
       throw new Error('Synthesis did not return any audio data. Please ensure the voice model loaded completely.');
     }
 
-    if (onProgress) onProgress({ stage: 'processing', message: 'Applying studio DSP audio effects...', percent: 88 });
+    if (onProgress) onProgress({ stage: 'processing', message: 'Applying studio DSP mastering & safe zone...', percent: 88 });
 
     const rawCombinedPcm = this.audioProcessor.concatenatePcmChunks(pcmChunks, sampleRate, sentenceGap);
 
@@ -460,15 +484,18 @@ class PiperEngine {
       compressor
     });
 
-    const durationSeconds = processedPcm.length / sampleRate;
+    // Add safe zone padding (0.08s pre-roll + 0.85s post-roll) to guarantee the final syllable/breath is never clipped!
+    const finalPcm = this.audioProcessor.addSafeZonePadding(processedPcm, sampleRate, 0.08, 0.85);
+
+    const durationSeconds = finalPcm.length / sampleRate;
 
     if (onProgress) onProgress({ stage: 'encoding_wav', message: 'Creating lossless WAV file...', percent: 92 });
-    const wavBlob = this.audioProcessor.pcmToWavBlob(processedPcm, sampleRate);
+    const wavBlob = this.audioProcessor.pcmToWavBlob(finalPcm, sampleRate);
 
     if (onProgress) onProgress({ stage: 'encoding_mp3', message: `Encoding MP3 (${mp3Bitrate} kbps)...`, percent: 96 });
     let mp3Blob = null;
     try {
-      mp3Blob = this.audioProcessor.pcmToMp3Blob(processedPcm, sampleRate, mp3Bitrate);
+      mp3Blob = this.audioProcessor.pcmToMp3Blob(finalPcm, sampleRate, mp3Bitrate);
     } catch (e) {
       console.warn('MP3 encoding failed, using WAV fallback:', e);
       mp3Blob = wavBlob;
@@ -477,7 +504,7 @@ class PiperEngine {
     if (onProgress) onProgress({ stage: 'done', message: 'Voice-over generated successfully!', percent: 100 });
 
     return {
-      pcmData: processedPcm,
+      pcmData: finalPcm,
       sampleRate,
       duration: durationSeconds,
       wavBlob,

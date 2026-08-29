@@ -36,6 +36,33 @@ class AudioProcessor {
   }
 
   /**
+   * Add professional studio safe zones (pre-roll breath room + trailing safe zone)
+   * to ensure zero truncation of the final consonant/breath during MP3 encoding or playback.
+   */
+  addSafeZonePadding(pcmData, sampleRate = 22050, headSec = 0.08, tailSec = 0.90) {
+    if (!pcmData || pcmData.length === 0) return pcmData;
+
+    const headSamples = Math.round(sampleRate * headSec);
+    const tailSamples = Math.round(sampleRate * tailSec);
+    const totalSamples = headSamples + pcmData.length + tailSamples;
+
+    const padded = new Float32Array(totalSamples);
+    
+    // Copy main PCM with head offset
+    padded.set(pcmData, headSamples);
+
+    // Apply smooth 15ms micro-fadeout at the end of original voice data to avoid any DC pop
+    const fadeSamples = Math.min(Math.round(sampleRate * 0.015), pcmData.length);
+    const fadeStart = headSamples + pcmData.length - fadeSamples;
+    for (let i = 0; i < fadeSamples; i++) {
+      const factor = 1.0 - (i / fadeSamples);
+      padded[fadeStart + i] *= factor;
+    }
+
+    return padded;
+  }
+
+  /**
    * Concatenate multiple PCM chunks with silence gaps (in seconds)
    */
   concatenatePcmChunks(chunks, sampleRate, gapDurationSeconds = 0.22) {
