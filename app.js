@@ -17,8 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const samplePills = document.querySelectorAll('.pill-btn[data-sample]');
 
   // Voice Selection Elements
-  const voiceSearchInput = document.getElementById('voiceSearchInput');
   const langFilterSelect = document.getElementById('langFilterSelect');
+  const voiceSelect = document.getElementById('voiceSelect');
   const voiceCountBadge = document.getElementById('voiceCountBadge');
   const voiceFlagEl = document.getElementById('voiceFlag');
   const voiceNameDisplay = document.getElementById('voiceNameDisplay');
@@ -119,19 +119,85 @@ document.addEventListener('DOMContentLoaded', () => {
     return (parts[1] || parts[0] || 'US').toUpperCase();
   }
 
-  // 4. Initialize Voice Selection
+  // 4. Initialize Voice Selection Dropdowns
   function initVoices() {
     const voices = window.PIPER_VOICES || {};
     const voiceCount = Object.keys(voices).length;
     if (voiceCountBadge) voiceCountBadge.textContent = `${voiceCount} voices`;
 
     if (!voices[currentVoiceId]) {
-      currentVoiceId = Object.keys(voices)[0] || 'en_US-lessac-high';
+      currentVoiceId = Object.keys(voices)[0] || 'en_US-ryan-high';
     }
 
-    updateActiveVoiceCard(currentVoiceId);
+    populateVoiceDropdown(langFilterSelect.value || 'en', currentVoiceId);
     renderHistory();
     updateTextStats();
+  }
+
+  function populateVoiceDropdown(selectedLang = 'en', targetVoiceId = null) {
+    const voices = window.PIPER_VOICES || {};
+    const voiceList = Object.values(voices);
+    
+    // Filter voices according to language
+    const filtered = voiceList.filter((v) => {
+      if (selectedLang === 'all') return true;
+      const prefix = v.langCode.split('_')[0].toLowerCase();
+      return prefix === selectedLang.toLowerCase();
+    });
+
+    voiceSelect.innerHTML = '';
+
+    if (filtered.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No voices found';
+      voiceSelect.appendChild(opt);
+      return;
+    }
+
+    // Group by language if 'all' is selected
+    if (selectedLang === 'all') {
+      const groups = {};
+      filtered.forEach((v) => {
+        const langTitle = `${v.langEnglish || v.langNative} (${v.langCode})`;
+        if (!groups[langTitle]) groups[langTitle] = [];
+        groups[langTitle].push(v);
+      });
+
+      for (const [langTitle, groupVoices] of Object.entries(groups)) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = langTitle;
+        groupVoices.forEach((v) => {
+          const opt = document.createElement('option');
+          opt.value = v.id;
+          const qualityTag = v.quality === 'high' ? 'HD' : v.quality === 'medium' ? 'MED' : 'FAST';
+          opt.textContent = `${capitalize(v.name)} [${qualityTag}]`;
+          optgroup.appendChild(opt);
+        });
+        voiceSelect.appendChild(optgroup);
+      }
+    } else {
+      filtered.forEach((v) => {
+        const opt = document.createElement('option');
+        opt.value = v.id;
+        const qualityTag = v.quality === 'high' ? 'High HD (22kHz)' : v.quality === 'medium' ? 'Medium (22kHz)' : 'Fast (16kHz)';
+        opt.textContent = `${capitalize(v.name)} — ${qualityTag}`;
+        voiceSelect.appendChild(opt);
+      });
+    }
+
+    // Set active selected value
+    if (targetVoiceId && voices[targetVoiceId]) {
+      voiceSelect.value = targetVoiceId;
+      currentVoiceId = targetVoiceId;
+    } else if (filtered.some(v => v.id === currentVoiceId)) {
+      voiceSelect.value = currentVoiceId;
+    } else {
+      voiceSelect.value = filtered[0].id;
+      currentVoiceId = filtered[0].id;
+    }
+
+    updateActiveVoiceCard(voiceSelect.value);
   }
 
   function updateActiveVoiceCard(voiceId) {
@@ -190,41 +256,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Voice filtering & search
-  function getFilteredVoices() {
-    const voices = window.PIPER_VOICES || {};
-    const searchTerm = (voiceSearchInput.value || '').toLowerCase().trim();
-    const langFilter = langFilterSelect.value;
-
-    return Object.values(voices).filter((v) => {
-      if (langFilter !== 'all') {
-        const prefix = v.langCode.split('_')[0].toLowerCase();
-        if (prefix !== langFilter) return false;
-      }
-
-      if (searchTerm) {
-        const matchName = v.name.toLowerCase().includes(searchTerm);
-        const matchId = v.id.toLowerCase().includes(searchTerm);
-        const matchLang = (v.langEnglish || '').toLowerCase().includes(searchTerm) || (v.langNative || '').toLowerCase().includes(searchTerm);
-        return matchName || matchId || matchLang;
-      }
-
-      return true;
-    });
-  }
-
-  langFilterSelect.addEventListener('change', () => {
-    const filtered = getFilteredVoices();
-    if (filtered.length > 0) {
-      updateActiveVoiceCard(filtered[0].id);
+  // Voice Dropdown Listeners
+  voiceSelect.addEventListener('change', () => {
+    if (voiceSelect.value) {
+      updateActiveVoiceCard(voiceSelect.value);
     }
   });
 
-  voiceSearchInput.addEventListener('input', () => {
-    const filtered = getFilteredVoices();
-    if (filtered.length > 0) {
-      updateActiveVoiceCard(filtered[0].id);
-    }
+  langFilterSelect.addEventListener('change', () => {
+    populateVoiceDropdown(langFilterSelect.value);
   });
 
   // 5. Sliders and Presets Binding
@@ -311,16 +351,16 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (sampleKey === 'en_us') {
           langFilterSelect.value = 'en';
-          updateActiveVoiceCard('en_US-ryan-high');
+          populateVoiceDropdown('en', 'en_US-ryan-high');
         } else if (sampleKey === 'en_gb') {
           langFilterSelect.value = 'en';
-          updateActiveVoiceCard('en_GB-cori-high');
+          populateVoiceDropdown('en', 'en_GB-alan-medium');
         } else if (sampleKey === 'sk') {
           langFilterSelect.value = 'sk';
-          updateActiveVoiceCard('sk_SK-lili-medium');
+          populateVoiceDropdown('sk', 'sk_SK-lili-medium');
         } else if (sampleKey === 'cs') {
           langFilterSelect.value = 'cs';
-          updateActiveVoiceCard('cs_CZ-kasandra-medium');
+          populateVoiceDropdown('cs', 'cs_CZ-kasandra-medium');
         }
       }
     });

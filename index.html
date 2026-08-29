@@ -126,27 +126,45 @@
 
         <div class="voice-selector-box">
           <div class="voice-filter-row">
-            <div class="input-search-wrapper">
-              <span class="search-icon">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></svg>
-              </span>
-              <input type="text" id="voiceSearchInput" class="search-input" placeholder="Search voice or language...">
+            <div class="filter-field">
+              <label for="langFilterSelect" class="filter-label">Language / Region</label>
+              <select id="langFilterSelect" class="custom-select">
+                <option value="all">All Languages (175)</option>
+                <option value="en" selected>English (US & UK)</option>
+                <option value="sk">Slovak (Slovakia)</option>
+                <option value="cs">Czech (Czechia)</option>
+                <option value="de">German (Germany)</option>
+                <option value="es">Spanish (Spain & LatAm)</option>
+                <option value="fr">French (France)</option>
+                <option value="it">Italian (Italy)</option>
+                <option value="pl">Polish (Poland)</option>
+                <option value="uk">Ukrainian (Ukraine)</option>
+                <option value="pt">Portuguese</option>
+                <option value="nl">Dutch</option>
+                <option value="ro">Romanian</option>
+                <option value="hu">Hungarian</option>
+                <option value="sv">Swedish</option>
+                <option value="no">Norwegian</option>
+                <option value="fi">Finnish</option>
+                <option value="da">Danish</option>
+                <option value="el">Greek</option>
+                <option value="tr">Turkish</option>
+                <option value="ru">Russian</option>
+                <option value="ar">Arabic</option>
+                <option value="zh">Chinese</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+                <option value="vi">Vietnamese</option>
+                <option value="hi">Hindi</option>
+              </select>
             </div>
             
-            <select id="langFilterSelect" class="custom-select">
-              <option value="all">All Languages (175)</option>
-              <option value="en" selected>English (US & UK)</option>
-              <option value="sk">Slovak (Slovakia)</option>
-              <option value="cs">Czech (Czechia)</option>
-              <option value="de">German (Germany)</option>
-              <option value="es">Spanish (Spain & LatAm)</option>
-              <option value="fr">French (France)</option>
-              <option value="it">Italian (Italy)</option>
-              <option value="pl">Polish (Poland)</option>
-              <option value="uk">Ukrainian (Ukraine)</option>
-              <option value="pt">Portuguese</option>
-              <option value="nl">Dutch</option>
-            </select>
+            <div class="filter-field voice-select-field">
+              <label for="voiceSelect" class="filter-label">Voice Model</label>
+              <select id="voiceSelect" class="custom-select voice-dropdown">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
           </div>
 
           <!-- Active Selected Voice Card -->
