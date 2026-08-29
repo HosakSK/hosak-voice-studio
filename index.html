@@ -68,12 +68,27 @@
             <span>Voice-Over Script</span>
           </div>
           <div class="editor-tools">
-            <button class="btn-tool" id="btnInsertPause" title="Insert a natural pause into speech">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-              Insert Pause
+            <button class="btn-tool" id="btnInsertPause" title="Insert a natural pause e.g. [pause 500ms]">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              + Pause
             </button>
-            <button class="btn-tool" id="btnClearText" title="Clear script text">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <button class="btn-tool" id="btnInsertPitch" title="Raise or lower pitch for selected text (e.g. [pitch +6]Yes![/pitch] or <prosody pitch='+70%'>)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+              Pitch
+            </button>
+            <button class="btn-tool" id="btnInsertSpeed" title="Speed up or slow down selected text (e.g. [speed 1.3]fast[/speed] or <prosody rate='1.3'>)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              Speed
+            </button>
+            <button class="btn-tool" id="btnInsertEmphasis" title="Add emphasis / volume to selected text (e.g. [loud]word[/loud] or <emphasis>)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+              Loud
+            </button>
+            <button class="btn-tool" id="btnInsertWhisper" title="Apply whisper or soft effect to selected text (e.g. [whisper]secret[/whisper])">
+              🤫 Whisper
+            </button>
+            <button class="btn-tool btn-clear" id="btnClearText" title="Clear script text">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               Clear
             </button>
           </div>
@@ -83,6 +98,7 @@
           <div class="sample-pills">
             <span class="pill-label">Samples:</span>
             <button class="pill-btn highlight-sample" data-sample="kevan"><span class="flag-tag">GB</span> 🎭 Kevan Brighting (Fever Meme)</button>
+            <button class="pill-btn" data-sample="prosody_demo"><span class="flag-tag">SSML</span> ⚡ Inline Prosody (<prosody pitch="+70%">Yes!</prosody>)</button>
             <button class="pill-btn" data-sample="en_us"><span class="flag-tag">US</span> English (US)</button>
             <button class="pill-btn" data-sample="en_gb"><span class="flag-tag">GB</span> English (UK)</button>
             <button class="pill-btn" data-sample="sk"><span class="flag-tag">SK</span> Slovak</button>

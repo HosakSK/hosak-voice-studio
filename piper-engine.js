@@ -299,92 +299,196 @@ class PiperEngine {
   }
 
   /**
-   * Parse text into speech segments and exact silence pauses
-   * Strictly respects:
-   * - [pause 500ms], [pause 1.2s], [pause 400], [pauza 800ms], [pause]
-   * - Sentence boundaries respecting the configured sentenceGap slider
-   * - Paragraph breaks
+   * Helper to parse pitch string into semitones
+   */
+  parsePitchToSemitones(valStr) {
+    if (!valStr) return 0;
+    valStr = valStr.toString().trim().toLowerCase();
+    if (valStr === 'high') return 4;
+    if (valStr === 'very-high' || valStr === 'x-high') return 7;
+    if (valStr === 'low') return -4;
+    if (valStr === 'very-low' || valStr === 'x-low') return -7;
+    if (valStr.endsWith('st') || valStr.endsWith('semitones')) {
+      return parseFloat(valStr) || 0;
+    }
+    if (valStr.endsWith('%')) {
+      const pct = parseFloat(valStr);
+      if (!isNaN(pct)) {
+        const ratio = 1 + (pct / 100);
+        if (ratio > 0.1) {
+          return 12 * Math.log2(ratio);
+        }
+      }
+    }
+    return parseFloat(valStr) || 0;
+  }
+
+  /**
+   * Helper to parse rate string into speed multiplier
+   */
+  parseRateToMultiplier(valStr) {
+    if (!valStr) return 1.0;
+    valStr = valStr.toString().trim().toLowerCase();
+    if (valStr === 'fast') return 1.25;
+    if (valStr === 'x-fast') return 1.5;
+    if (valStr === 'slow') return 0.80;
+    if (valStr === 'x-slow') return 0.65;
+    if (valStr.endsWith('%')) {
+      const pct = parseFloat(valStr);
+      if (!isNaN(pct)) return pct / 100;
+    }
+    return parseFloat(valStr) || 1.0;
+  }
+
+  /**
+   * Helper to parse volume string into gain multiplier
+   */
+  parseVolumeToMultiplier(valStr) {
+    if (!valStr) return 1.0;
+    valStr = valStr.toString().trim().toLowerCase();
+    if (valStr === 'loud') return 1.30;
+    if (valStr === 'x-loud') return 1.60;
+    if (valStr === 'soft' || valStr === 'quiet') return 0.70;
+    if (valStr === 'x-soft') return 0.50;
+    if (valStr.endsWith('%')) {
+      const pct = parseFloat(valStr);
+      if (!isNaN(pct)) return pct / 100;
+    }
+    return parseFloat(valStr) || 1.0;
+  }
+
+  /**
+   * Parse text with full support for:
+   * - SSML tags: <prosody pitch="..." rate="..." volume="...">, <emphasis>, <break time="..."/>
+   * - Studio tags: [pitch +6]...[/pitch], [speed 1.3]...[/speed], [loud]...[/loud], [whisper]...[/whisper], [robot], [radio], [pause 500ms]
+   * - Natural sentences and sentenceGap slider
    */
   parseScriptWithPauses(text, defaultSentenceGap = 0.22) {
     if (!text || text.trim().length === 0) return [];
 
     let cleaned = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-    // 1. Check if there are explicit [pause ...] or [pauza ...] tags
-    const pauseTagRegex = /\[(?:pause|pauza)(?:\s+(\d+(?:\.\d+)?)\s*(ms|s|sek)?)?\]/gi;
-    const hasExplicitPauseTags = pauseTagRegex.test(cleaned);
-    pauseTagRegex.lastIndex = 0; // reset regex index
+    // 1. Normalize Studio bracket tags to standard SSML-like XML tags
+    cleaned = cleaned.replace(/\[(?:pause|pauza)(?:\s+(\d+(?:\.\d+)?)\s*(ms|s|sek)?)?\]/gi, (m, val, unit) => {
+      const dur = val ? `${val}${unit || 'ms'}` : `${Math.round((defaultSentenceGap || 0.35) * 1000)}ms`;
+      return `<break time="${dur}"/>`;
+    });
 
-    if (hasExplicitPauseTags) {
-      // Replace tags with unique delimiter token
-      const marked = cleaned.replace(pauseTagRegex, (match, valStr, unit) => {
-        let durSec = defaultSentenceGap || 0.35;
-        if (valStr) {
-          const val = parseFloat(valStr);
-          if (unit && (unit.toLowerCase() === 's' || unit.toLowerCase() === 'sek')) {
-            durSec = val;
-          } else if (unit && unit.toLowerCase() === 'ms') {
-            durSec = val / 1000;
-          } else {
-            durSec = val >= 10 ? val / 1000 : val;
-          }
-        }
-        return `\n__EXPLICIT_PAUSE_${durSec.toFixed(3)}__\n`;
-      });
+    cleaned = cleaned.replace(/\[pitch\s+([+-]?\d+(?:\.\d+)?(?:st|%)?)\]([\s\S]*?)\[\/pitch\]/gi, (m, p, content) => {
+      return `<prosody pitch="${p}">${content}</prosody>`;
+    });
+    cleaned = cleaned.replace(/\[high\]([\s\S]*?)\[\/high\]/gi, '<prosody pitch="high">$1</prosody>');
+    cleaned = cleaned.replace(/\[deep\]([\s\S]*?)\[\/deep\]/gi, '<prosody pitch="low">$1</prosody>');
 
-      const lines = marked.split('\n');
-      const items = [];
+    cleaned = cleaned.replace(/\[speed\s+(\d+(?:\.\d+)?x?)\]([\s\S]*?)\[\/speed\]/gi, (m, r, content) => {
+      return `<prosody rate="${r.replace('x', '')}">${content}</prosody>`;
+    });
+    cleaned = cleaned.replace(/\[fast\]([\s\S]*?)\[\/fast\]/gi, '<prosody rate="fast">$1</prosody>');
+    cleaned = cleaned.replace(/\[slow\]([\s\S]*?)\[\/slow\]/gi, '<prosody rate="slow">$1</prosody>');
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
+    cleaned = cleaned.replace(/\[loud\]([\s\S]*?)\[\/loud\]/gi, '<prosody volume="loud">$1</prosody>');
+    cleaned = cleaned.replace(/\[soft\]([\s\S]*?)\[\/soft\]/gi, '<prosody volume="soft">$1</prosody>');
+    cleaned = cleaned.replace(/\[whisper\]([\s\S]*?)\[\/whisper\]/gi, '<prosody fx="whisper" volume="soft">$1</prosody>');
+    cleaned = cleaned.replace(/\[robot\]([\s\S]*?)\[\/robot\]/gi, '<prosody fx="robot">$1</prosody>');
+    cleaned = cleaned.replace(/\[radio\]([\s\S]*?)\[\/radio\]/gi, '<prosody fx="radio">$1</prosody>');
 
-        const pauseMatch = trimmed.match(/^__EXPLICIT_PAUSE_(\d+\.\d+)__$/);
-        if (pauseMatch) {
-          const dur = parseFloat(pauseMatch[1]);
-          items.push({ type: 'pause', durationSec: Math.max(0.05, Math.min(10.0, dur)) });
-        } else {
-          // Normal speech text - clean leading/trailing ellipsis helper marks
-          const cleanText = trimmed.replace(/^\s*\.\.\.\s*/, '').replace(/\s*\.\.\.\s*$/, '').trim();
-          if (cleanText.length > 0) {
-            items.push({ type: 'text', text: cleanText });
-          }
-        }
-      }
+    // 2. Tokenize SSML and text segments
+    // Matches: <break time="..."/>, <prosody ...>...</prosody>, <emphasis ...>...</emphasis>
+    const tagRegex = /(<break\s+time=["']?([^"'>]+)["']?\s*\/?>)|(<prosody\s+([^>]+)>([\s\S]*?)<\/prosody>)|(<emphasis(?:\s+level=["']?([^"'>]+)["']?)?>([\s\S]*?)<\/emphasis>)/gi;
 
-      return items;
-    }
-
-    // 2. If no explicit [pause ...] tags, parse by paragraphs and sentences respecting the sentenceGap slider
-    const rawParagraphs = cleaned.split(/\n{2,}/);
+    let lastIdx = 0;
+    let match;
     const items = [];
-    const sentenceGapSec = Math.max(0.05, defaultSentenceGap);
 
-    for (let pIdx = 0; pIdx < rawParagraphs.length; pIdx++) {
-      const para = rawParagraphs[pIdx].trim();
-      if (!para) continue;
-
-      const sentences = para.split(/(?<=[.!?…])\s+/);
-
-      for (let sIdx = 0; sIdx < sentences.length; sIdx++) {
-        const sent = sentences[sIdx].trim();
-        if (sent.length > 0) {
-          items.push({ type: 'text', text: sent });
-
-          // Add configured sentence gap between sentences
-          if (sIdx < sentences.length - 1) {
-            items.push({ type: 'pause', durationSec: sentenceGapSec });
-          }
-        }
+    while ((match = tagRegex.exec(cleaned)) !== null) {
+      // Push any preceding text
+      const preText = cleaned.substring(lastIdx, match.index).trim();
+      if (preText.length > 0) {
+        this.pushTextOrSentences(items, preText, defaultSentenceGap);
       }
+      lastIdx = tagRegex.lastIndex;
 
-      // Add paragraph gap between paragraphs
-      if (pIdx < rawParagraphs.length - 1) {
-        items.push({ type: 'pause', durationSec: Math.max(sentenceGapSec * 1.5, 0.45) });
+      if (match[1]) {
+        // <break time="..."/>
+        const timeStr = match[2] ? match[2].trim().toLowerCase() : '350ms';
+        let durSec = 0.35;
+        if (timeStr.endsWith('ms')) {
+          durSec = parseFloat(timeStr) / 1000;
+        } else if (timeStr.endsWith('s')) {
+          durSec = parseFloat(timeStr);
+        } else {
+          const val = parseFloat(timeStr);
+          durSec = val >= 10 ? val / 1000 : val;
+        }
+        items.push({ type: 'pause', durationSec: Math.max(0.05, Math.min(10.0, durSec || 0.35)) });
+
+      } else if (match[3]) {
+        // <prosody attr="...">content</prosody>
+        const attrStr = match[4] || '';
+        const content = (match[5] || '').trim();
+        if (content.length > 0) {
+          const pitchMatch = attrStr.match(/pitch=["']?([^"'\s>]+)["']?/i);
+          const rateMatch = attrStr.match(/rate=["']?([^"'\s>]+)["']?/i);
+          const volumeMatch = attrStr.match(/volume=["']?([^"'\s>]+)["']?/i);
+          const fxMatch = attrStr.match(/fx=["']?([^"'\s>]+)["']?/i);
+
+          const pitchShift = pitchMatch ? this.parsePitchToSemitones(pitchMatch[1]) : 0;
+          const speedMultiplier = rateMatch ? this.parseRateToMultiplier(rateMatch[1]) : 1.0;
+          const volumeMultiplier = volumeMatch ? this.parseVolumeToMultiplier(volumeMatch[1]) : 1.0;
+          const fx = fxMatch ? fxMatch[1].toLowerCase() : 'none';
+
+          items.push({
+            type: 'text',
+            text: content,
+            pitchShift,
+            speedMultiplier,
+            volumeMultiplier,
+            fx
+          });
+        }
+
+      } else if (match[6]) {
+        // <emphasis>content</emphasis>
+        const content = (match[8] || '').trim();
+        if (content.length > 0) {
+          items.push({
+            type: 'text',
+            text: content,
+            pitchShift: 1.5,
+            speedMultiplier: 0.95,
+            volumeMultiplier: 1.25,
+            fx: 'none'
+          });
+        }
       }
     }
 
-    return items.length > 0 ? items : [{ type: 'text', text: cleaned.trim() }];
+    // Push remaining tail text
+    const tailText = cleaned.substring(lastIdx).trim();
+    if (tailText.length > 0) {
+      this.pushTextOrSentences(items, tailText, defaultSentenceGap);
+    }
+
+    return items.length > 0 ? items : [{ type: 'text', text: cleaned.trim(), pitchShift: 0, speedMultiplier: 1.0, volumeMultiplier: 1.0, fx: 'none' }];
+  }
+
+  /**
+   * Helper to push plain text or sentence chunks
+   */
+  pushTextOrSentences(items, rawText, defaultSentenceGap) {
+    if (!rawText || rawText.trim().length === 0) return;
+    
+    const cleaned = rawText.trim();
+    if (!cleaned || cleaned === '.') return;
+
+    items.push({
+      type: 'text',
+      text: cleaned,
+      pitchShift: 0,
+      speedMultiplier: 1.0,
+      volumeMultiplier: 1.0,
+      fx: 'none'
+    });
   }
 
   /**
@@ -423,8 +527,6 @@ class PiperEngine {
     const espeakVoice = config.espeak?.voice || 'en-us';
 
     const baseLengthScale = config.inference?.length_scale || 1.0;
-    const calculatedLengthScale = Math.max(0.2, Math.min(3.0, baseLengthScale / speed));
-
     const finalNoiseScale = Number(noiseScale) || config.inference?.noise_scale || 0.667;
     const finalNoiseW = Number(noiseW) || config.inference?.noise_w || 0.800;
 
@@ -465,6 +567,10 @@ class PiperEngine {
           continue;
         }
 
+        // Apply item speed multiplier
+        const effectiveSpeed = speed * (item.speedMultiplier || 1.0);
+        const calculatedLengthScale = Math.max(0.2, Math.min(3.0, baseLengthScale / effectiveSpeed));
+
         const inputTensor = new window.ort.Tensor(
           'int64',
           BigInt64Array.from(phonemeIds.map(BigInt)),
@@ -502,7 +608,30 @@ class PiperEngine {
         const results = await session.run(feeds);
         const outputTensor = results.output || Object.values(results)[0];
         if (outputTensor && outputTensor.data) {
-          pcmChunks.push(outputTensor.data);
+          let chunkPcm = new Float32Array(outputTensor.data);
+
+          // Apply segment-level pitch shifting (if inline pitch is specified)
+          const segmentPitchShift = (pitchShift || 0) + (item.pitchShift || 0);
+          if (segmentPitchShift !== 0) {
+            chunkPcm = this.audioProcessor.pitchShiftGranular(chunkPcm, sampleRate, segmentPitchShift);
+          }
+
+          // Apply segment-level volume multiplier
+          const segmentVol = (item.volumeMultiplier || 1.0);
+          if (segmentVol !== 1.0) {
+            for (let v = 0; v < chunkPcm.length; v++) {
+              chunkPcm[v] *= segmentVol;
+            }
+          }
+
+          // Apply segment-level special FX
+          if (item.fx === 'robot') {
+            chunkPcm = this.audioProcessor.applyRobotFilter(chunkPcm, sampleRate);
+          } else if (item.fx === 'radio') {
+            chunkPcm = this.audioProcessor.applyRadioFilter(chunkPcm, sampleRate);
+          }
+
+          pcmChunks.push(chunkPcm);
         }
       }
     }
@@ -520,7 +649,7 @@ class PiperEngine {
       gain: volume,
       normalize: true,
       sampleRate,
-      pitchShift,
+      pitchShift: 0, // already applied per chunk if needed
       eqBass,
       eqMid,
       eqTreble,

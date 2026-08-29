@@ -16,6 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const wordCountEl = document.getElementById('wordCount');
   const estDurationEl = document.getElementById('estDuration');
   const btnInsertPause = document.getElementById('btnInsertPause');
+  const btnInsertPitch = document.getElementById('btnInsertPitch');
+  const btnInsertSpeed = document.getElementById('btnInsertSpeed');
+  const btnInsertEmphasis = document.getElementById('btnInsertEmphasis');
+  const btnInsertWhisper = document.getElementById('btnInsertWhisper');
   const btnClearText = document.getElementById('btnClearText');
   const samplePills = document.querySelectorAll('.pill-btn[data-sample]');
 
@@ -157,6 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Sample Texts
   const SAMPLES = {
     kevan: 'When Stanley came to a set of two open doors, he entered the door on his left. ... [pause 450ms] This was not, in fact, the correct path, but Stanley was nothing if not persistent. ... [pause 600ms] Ah, yes. The sweet, delirious heat of a fever dream.',
+    prosody_demo: 'I would like to introduce you to something. <prosody pitch="+70%">Yes!</prosody> Yet another EFB application... [pause 500ms] Notice how [speed 1.3]this part is fast[/speed], while [pitch -4]this part is deep[/pitch], and this is [loud]loud and powerful[/loud]!',
     en_us: 'Welcome to the Piper Voice-Over Studio! High quality neural text-to-speech running completely offline and locally in your browser.',
     en_gb: 'Good day! Piper TTS delivers remarkably clear, expressive and natural British English voice-overs with zero cloud latency.',
     sk: 'Vitajte v modernom štúdiu hlasových nahrávok! Piper TTS vytvára prirodzenú reč s vysokou vernosťou priamo vo vašom prehliadači.',
@@ -483,16 +488,48 @@ document.addEventListener('DOMContentLoaded', () => {
   scriptInput.addEventListener('input', updateTextStats);
   speedRange.addEventListener('change', updateTextStats);
 
-  btnInsertPause.addEventListener('click', () => {
-    const pauseTag = '... [pause 500ms] ';
+  function wrapSelectedText(openTag, closeTag, defaultText = 'text') {
     const start = scriptInput.selectionStart;
     const end = scriptInput.selectionEnd;
-    const text = scriptInput.value;
-    scriptInput.value = text.substring(0, start) + pauseTag + text.substring(end);
-    scriptInput.selectionStart = scriptInput.selectionEnd = start + pauseTag.length;
+    const fullText = scriptInput.value;
+    const selected = fullText.substring(start, end);
+    const content = selected || defaultText;
+    const insertion = `${openTag}${content}${closeTag}`;
+    
+    scriptInput.value = fullText.substring(0, start) + insertion + fullText.substring(end);
+    scriptInput.selectionStart = start + openTag.length;
+    scriptInput.selectionEnd = start + openTag.length + content.length;
     scriptInput.focus();
     updateTextStats();
+  }
+
+  btnInsertPause.addEventListener('click', () => {
+    wrapSelectedText('[pause 500ms] ', '', '');
   });
+
+  if (btnInsertPitch) {
+    btnInsertPitch.addEventListener('click', () => {
+      wrapSelectedText('[pitch +6]', '[/pitch]', 'Yes!');
+    });
+  }
+
+  if (btnInsertSpeed) {
+    btnInsertSpeed.addEventListener('click', () => {
+      wrapSelectedText('[speed 1.3]', '[/speed]', 'fast speech');
+    });
+  }
+
+  if (btnInsertEmphasis) {
+    btnInsertEmphasis.addEventListener('click', () => {
+      wrapSelectedText('[loud]', '[/loud]', 'important word');
+    });
+  }
+
+  if (btnInsertWhisper) {
+    btnInsertWhisper.addEventListener('click', () => {
+      wrapSelectedText('[whisper]', '[/whisper]', 'secret message');
+    });
+  }
 
   btnClearText.addEventListener('click', () => {
     if (confirm('Are you sure you want to clear the entire script text?')) {
@@ -511,6 +548,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (sampleKey === 'kevan') {
           applyPreset('kevan');
+        } else if (sampleKey === 'prosody_demo') {
+          langFilterSelect.value = 'en';
+          populateVoiceDropdown('en', activeTagFilter, 'en_US-ryan-high');
         } else if (sampleKey === 'en_us') {
           langFilterSelect.value = 'en';
           populateVoiceDropdown('en', activeTagFilter, 'en_US-ryan-high');
