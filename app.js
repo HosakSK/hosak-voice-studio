@@ -151,6 +151,26 @@ document.addEventListener('DOMContentLoaded', () => {
       specialFx: 'none', // None (Clean Vocal)
       compressor: true   // Broadcast Dynamics Compressor (On)
     },
+    ryan: {
+      voiceId: 'en_US-ryan-high',
+      lang: 'en',
+      speed: 1.00,       // 1.00x Speaking Speed (Tempo)
+      pitch: 0,          // 0 st Pitch Transposition
+      noiseScale: 1.000, // 1.000 Tone Variability / Expression
+      noiseW: 1.000,     // 1.000 Phoneme Cadence & Rhythm
+      gap: 0.20,         // 0.20s Sentence Pause Gap
+      volume: 1.00,      // 100% Master Volume / Gain
+      eqBass: 0,
+      eqMid: 0,
+      eqTreble: 0,
+      reverb: 'none',
+      reverbMix: 0.00,
+      echo: false,
+      echoTimeMs: 250,
+      echoFeedback: 0.35,
+      specialFx: 'none',
+      compressor: true
+    },
     natural: { speed: 1.00, pitch: 0, noiseScale: 0.667, noiseW: 0.800, volume: 1.00, gap: 0.22, eqBass: 0, eqMid: 0, eqTreble: 0, reverb: 'none', echo: false, specialFx: 'none', compressor: true },
     fast: { speed: 1.25, pitch: 0, noiseScale: 0.667, noiseW: 0.750, volume: 1.10, gap: 0.15, eqBass: 1, eqMid: 2, eqTreble: 1, reverb: 'none', echo: false, specialFx: 'none', compressor: true },
     trailer: { speed: 0.85, pitch: -3, noiseScale: 0.850, noiseW: 0.900, volume: 1.25, gap: 0.35, eqBass: 5, eqMid: 2, eqTreble: 3, reverb: 'hall', reverbMix: 0.30, echo: false, specialFx: 'none', compressor: true },
@@ -161,6 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Sample Texts
   const SAMPLES = {
     kevan: 'When Stanley came to a set of two open doors, he entered the door on his left. ... [pause 450ms] This was not, in fact, the correct path, but Stanley was nothing if not persistent. ... [pause 600ms] Ah, yes. The sweet, delirious heat of a fever dream.',
+    ryan: 'Alright! <break time="200ms"/><prosody rate="1.1">Huge thanks to my colleague for that thrilling existential drama.</prosody> <break time="250ms"/>Hope you managed to stay awake! <break time="300ms"/><prosody volume="loud" rate="1.05">Now, let’s get down to business.</prosody> <break time="400ms"/>Step one is super simple. The beating heart of Charlie-Lima is the aviation checklist!',
     prosody_demo: 'I would like to introduce you to something. <prosody pitch="+70%">Yes!</prosody> Yet another EFB application... [pause 500ms] Notice how [speed 1.3]this part is fast[/speed], while [pitch -4]this part is deep[/pitch], and this is [loud]loud and powerful[/loud]!',
     en_us: 'Welcome to the Piper Voice-Over Studio! High quality neural text-to-speech running completely offline and locally in your browser.',
     en_gb: 'Good day! Piper TTS delivers remarkably clear, expressive and natural British English voice-overs with zero cloud latency.',
@@ -548,6 +569,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (sampleKey === 'kevan') {
           applyPreset('kevan');
+        } else if (sampleKey === 'ryan') {
+          applyPreset('ryan');
         } else if (sampleKey === 'prosody_demo') {
           langFilterSelect.value = 'en';
           populateVoiceDropdown('en', activeTagFilter, 'en_US-ryan-high');
